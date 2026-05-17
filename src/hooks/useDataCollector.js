@@ -138,10 +138,18 @@ export function useDataCollector() {
   }, [dataset]);
 
   const clearDataset = () => {
-    if(window.confirm("¿Estás seguro de borrar todas las grabaciones?")) {
-      setDataset([]);
-      setSamplesCount({});
-    }
+    // Eliminamos la ventana de confirmación porque el navegador la estaba bloqueando
+    setDataset([]);
+    setSamplesCount({});
+    
+    // Borrar explícitamente de la base de datos
+    set("lsv-dataset", []).catch(err => console.error("Error al limpiar BD:", err));
+    
+    // También borrar el modelo entrenado
+    localStorage.removeItem("lsv-labels");
+    
+    console.log("🧹 Dataset y base de datos limpiados directamente.");
+    alert("¡Base de datos borrada con éxito!");
   };
 
   const undoLastSample = useCallback(() => {

@@ -12,17 +12,34 @@ export function useCamera() {
   const [status, setStatus] = useState("idle"); // idle | loading | ready | error | denied
   const [error, setError] = useState(null);
   const [deviceName, setDeviceName] = useState("");
+  
+  // Soporte para múltiples cámaras
+  const [cameras, setCameras] = useState([]);
+  const [selectedDeviceId, setSelectedDeviceId] = useState("");
 
   const startCamera = useCallback(async () => {
     setStatus("loading");
     setError(null);
 
     try {
+      // Buscar dispositivos disponibles si no se han cargado
+      if (cameras.length === 0) {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videoDevices = devices.filter(device => device.kind === 'videoinput');
+        setCameras(videoDevices);
+        
+        // Si no hay una seleccionada y hay cámaras, seleccionar la primera
+        if (!selectedDeviceId && videoDevices.length > 0) {
+          setSelectedDeviceId(videoDevices[0].deviceId);
+        }
+      }
+
       const constraints = {
         video: {
           width: { ideal: CAMERA_CONFIG.width },
           height: { ideal: CAMERA_CONFIG.height },
           frameRate: { ideal: CAMERA_CONFIG.frameRate },
+          ...(selectedDeviceId ? { deviceId: { exact: selectedDeviceId } } : {})
         },
         audio: false,
       };
@@ -55,7 +72,25 @@ export function useCamera() {
       }
       console.error("Camera error:", err);
     }
-  }, []);
+  }, [selectedDeviceId, cameras.length]); // Añadir dependencias
+
+  // Cambiar de cámara en tiempo real
+  const switchCamera = useCallback(async (deviceId) => {
+    if (deviceId === selectedDeviceId) return;
+    
+    setSelectedDeviceId(deviceId);
+    
+    // Si la cámara ya está encendida, reiniciarla con el nuevo dispositivo
+    if (status === "ready" || status === "loading") {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((track) => track.stop());
+      }
+      // Pequeña pausa para permitir que el hardware libere la cámara vieja
+      setTimeout(() => {
+        startCamera();
+      }, 100);
+    }
+  }, [selectedDeviceId, status, startCamera]);
 
   const stopCamera = useCallback(() => {
     if (streamRef.current) {
@@ -82,6 +117,9 @@ export function useCamera() {
     status,
     error,
     deviceName,
+    cameras, // Exportar cámaras disponibles
+    selectedDeviceId, // ID seleccionado
+    switchCamera, // Función para cambiar
     startCamera,
     stopCamera,
   };

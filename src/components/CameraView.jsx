@@ -237,6 +237,35 @@ export function CameraView({ onDiagnosticsUpdate, onFrameRecord, isRecording, co
 
   return (
     <div className="camera-view" id="camera-view">
+      {/* Menú de selección de Cámara (solo visible si hay más de 1) */}
+      {camera.cameras && camera.cameras.length > 1 && (
+        <div style={{ position: 'absolute', top: '10px', left: '10px', zIndex: 50 }}>
+          <select 
+            value={camera.selectedDeviceId} 
+            onChange={(e) => camera.switchCamera(e.target.value)}
+            style={{ 
+              background: 'rgba(0,0,0,0.6)', 
+              color: 'white', 
+              border: '1px solid rgba(255,255,255,0.3)', 
+              padding: '4px 8px', 
+              borderRadius: '4px',
+              fontSize: '0.8rem',
+              outline: 'none',
+              cursor: 'pointer',
+              maxWidth: '180px',
+              textOverflow: 'ellipsis'
+            }}
+            title="Cambiar Cámara"
+          >
+            {camera.cameras.map((cam, idx) => (
+              <option key={cam.deviceId} value={cam.deviceId}>
+                📷 {cam.label || `Cámara ${idx + 1}`}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
       {/* Estado de carga */}
       {(camera.status === "idle" || camera.status === "loading") && (
         <div className="camera-overlay loading-overlay" id="camera-loading">

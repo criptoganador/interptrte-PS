@@ -154,6 +154,10 @@ export function useSignTranslation() {
       utterance.lang = "es-ES";
     }
     
+    // Ajuste de tono para simular voz de mujer si la voz es masculina
+    utterance.pitch = 1.2; // 1.2 es más agudo (más femenino)
+    utterance.rate = 1.0;  // Velocidad normal
+    
     window.speechSynthesis.speak(utterance);
   };
 
