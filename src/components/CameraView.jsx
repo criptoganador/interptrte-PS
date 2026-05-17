@@ -24,20 +24,22 @@ export function CameraView({ onDiagnosticsUpdate, onFrameRecord, isRecording, co
   const [isInitialized, setIsInitialized] = useState(false);
   const [sentence, setSentence] = useState([]); // Estado para la frase completa
 
-  // Auto-hablar y limpiar frase tras 4 segundos de inactividad
+  // Auto-hablar y limpiar frase tras 3 segundos de inactividad
   useEffect(() => {
     if (sentence.length > 0) {
       const timer = setTimeout(() => {
         if (sentence.length > 1) {
           // Si hay más de una palabra, la lee de corrido con mejor fluidez
-          translation.speakText(sentence.join(" "));
+          translationRef.current.speakText(sentence.join(" "));
         }
         setSentence([]); // Limpiar la pantalla para la siguiente oración
-      }, 4000); // 4 segundos de pausa
+      }, 3000); // 3 segundos de pausa
 
       return () => clearTimeout(timer);
     }
-  }, [sentence, translation]);
+    // Solo dependemos de 'sentence' para que los updates del modelo no reseteen el timer infinito
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sentence]);
 
   const camera = useCamera();
   const handDetection = useHandDetection();

@@ -49,3 +49,19 @@ export function extractFeatures(frame) {
   // El vector final siempre tiene 126 posiciones, sin importar si falta una mano
   return [...rightHand, ...leftHand];
 }
+
+/**
+ * Calcula la distancia Euclidiana entre dos vectores de características (esqueletos).
+ * Se usa para el Validador Matemático (Out-of-Distribution Detection).
+ * @param {number[]} featuresA Vector actual
+ * @param {number[]} featuresB Molde (Centroide) guardado
+ * @returns {number} Distancia geométrica
+ */
+export function calculateDistance(featuresA, featuresB) {
+  if (!featuresA || !featuresB || featuresA.length !== featuresB.length) return Infinity;
+  let sum = 0;
+  for (let i = 0; i < featuresA.length; i++) {
+    sum += (featuresA[i] - featuresB[i]) ** 2;
+  }
+  return Math.sqrt(sum);
+}

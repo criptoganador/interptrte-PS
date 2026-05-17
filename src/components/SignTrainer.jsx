@@ -10,7 +10,7 @@ import { extractFeatures } from '../utils/featureExtraction';
 export function SignTrainer({ dataset, onModelTrained }) {
   const [trainingStatus, setTrainingStatus] = useState('idle'); // idle, training, finished
   const [logs, setLogs] = useState([]);
-  const [accuracy, setAccuracy] = useState(0);
+  const [progress, setProgress] = useState(0);
 
   const addLog = (msg) => setLogs(prev => [msg, ...prev].slice(0, 10));
 
@@ -41,17 +41,28 @@ export function SignTrainer({ dataset, onModelTrained }) {
       }
     });
 
-    // === INYECCIÓN DE RUIDO SINTÉTICO ===
+    // === INYECCIÓN DE RUIDO SINTÉTICO MEJORADO (VIGILANTE) ===
     // Generamos datos "falsos" o "rotos" para enseñarle a la IA qué es basura.
-    // Usamos la mitad del total de muestras como ruido.
-    const numNoiseSamples = Math.max(15, Math.floor(inputs.length * 0.5));
+    const numNoiseSamples = Math.max(10, Math.floor(inputs.length * 1.5));
     const validInputsLength = inputs.length;
 
     for (let i = 0; i < numNoiseSamples; i++) {
       if (validInputsLength > 0) {
         const baseIdx = Math.floor(Math.random() * validInputsLength);
-        // Distorsionamos agresivamente las coordenadas (movimientos al azar, fuera de lugar)
-        const noiseFeature = inputs[baseIdx].map(val => val + (Math.random() * 2 - 1));
+        
+        // Tipo de ruido aleatorio: 
+        // 1. Ruido ligero (para enseñar márgenes estrictos, poses casi iguales pero incorrectas)
+        // 2. Ruido agresivo (poses totalmente diferentes)
+        const noiseType = Math.random();
+        let noiseFeature;
+        
+        if (noiseType > 0.5) {
+          // Ruido engañoso (ligeramente diferente)
+          noiseFeature = inputs[baseIdx].map(val => val + (Math.random() * 0.3 - 0.15));
+        } else {
+          // Ruido agresivo (fuera de lugar)
+          noiseFeature = inputs[baseIdx].map(val => val + (Math.random() * 2 - 1));
+        }
         
         inputs.push(noiseFeature);
         const output = new Array(labels.length).fill(0);
@@ -77,13 +88,13 @@ export function SignTrainer({ dataset, onModelTrained }) {
 
     const { xs, ys, labels, inputSize, outputSize } = processData(dataset);
 
-    if (labels.length < 2) {
-      addLog("⚠️ Necesitas grabar al menos 2 señas diferentes.");
+    if (labels.length < 2) { // Recuerda que 'labels' ya incluye 'REPOSO' por lo que si hay 1 seña del usuario, length es 2
+      addLog("⚠️ Necesitas grabar al menos 1 seña.");
       return;
     }
 
     setTrainingStatus('training');
-    setAccuracy(0);
+    setProgress(0);
     addLog(`🧠 Iniciando red neuronal (${labels.length} señas)...`);
 
     const model = tf.sequential();
@@ -106,7 +117,7 @@ export function SignTrainer({ dataset, onModelTrained }) {
       epochs: 30, 
       validationSplit: 0.1, 
       callbacks: { 
-        onEpochEnd: (epoch, logs) => setAccuracy(logs.acc) 
+        onEpochEnd: (epoch, logs) => setProgress((epoch + 1) / 30) 
       } 
     });
 
@@ -115,6 +126,35 @@ export function SignTrainer({ dataset, onModelTrained }) {
     // Guardado automático sin archivos
     await model.save('indexeddb://lsv-model');
     localStorage.setItem("lsv-labels", JSON.stringify(labels));
+
+    // === CÁLCULO DE MOLDES (CENTROIDES) PARA VALIDACIÓN ===
+    const centroids = {};
+    labels.forEach(label => {
+      if (label === "REPOSO") return;
+      
+      const samples = dataset.filter(item => item.label === label);
+      if (samples.length === 0) return;
+      
+      const allFeatures = samples.map(sample => {
+        const middleFrameIndex = Math.floor(sample.sequence.length / 2);
+        return extractFeatures(sample.sequence[middleFrameIndex]);
+      }).filter(Boolean);
+      
+      if (allFeatures.length > 0) {
+        const centroid = new Array(126).fill(0);
+        allFeatures.forEach(features => {
+          for (let i = 0; i < 126; i++) {
+            centroid[i] += features[i];
+          }
+        });
+        for (let i = 0; i < 126; i++) {
+          centroid[i] /= allFeatures.length;
+        }
+        centroids[label] = centroid;
+      }
+    });
+    localStorage.setItem("lsv-centroids", JSON.stringify(centroids));
+    addLog("📏 Moldes matemáticos guardados.");
 
     setTrainingStatus('finished');
     addLog("🏆 ¡Entrenado y Listo!");
@@ -140,22 +180,22 @@ export function SignTrainer({ dataset, onModelTrained }) {
           <p style={{fontSize: '11px'}}>Muestras: {dataset.length} | Señas: {uniqueLabels.length}</p>
           
           <div className="progress-bar-bg">
-            <div className="progress-bar-fill" style={{width: `${accuracy * 100}%`}}></div>
+            <div className="progress-bar-fill" style={{width: `${progress * 100}%`}}></div>
           </div>
           
           <div className="button-group">
             <button 
               className="action-button train" 
               onClick={trainModel} 
-              disabled={trainingStatus === 'training' || uniqueLabels.length < 2}
+              disabled={trainingStatus === 'training' || uniqueLabels.length < 1}
             >
               {trainingStatus === 'training' ? 'ENTRENANDO...' : '🏋️ ENTRENAR IA'}
             </button>
           </div>
           
-          {uniqueLabels.length < 2 && (
+          {uniqueLabels.length < 1 && (
             <p style={{fontSize: '10px', color: 'var(--color-warning)', marginTop: '4px'}}>
-              Graba al menos 2 señas distintas para entrenar.
+              Graba al menos 1 seña para entrenar.
             </p>
           )}
         </div>

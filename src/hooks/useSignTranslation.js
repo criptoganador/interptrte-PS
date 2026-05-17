@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import * as tf from "@tensorflow/tfjs";
-import { extractFeatures } from "../utils/featureExtraction";
+import { extractFeatures, calculateDistance } from "../utils/featureExtraction";
 
 export function useSignTranslation() {
   const [model, setModel] = useState(null);
@@ -15,6 +15,8 @@ export function useSignTranslation() {
   const predictionHistoryRef = useRef([]);
   // Etiquetas por defecto, se sobrescribirán con las de LocalStorage
   const labelsRef = useRef([]); 
+  // Moldes promedio para validación geométrica estricta
+  const centroidsRef = useRef({});
 
   // Cargar el modelo desde IndexedDB (creado por el entrenamiento)
   const loadModel = useCallback(async () => {
@@ -29,6 +31,13 @@ export function useSignTranslation() {
       if (savedLabels) {
         labelsRef.current = JSON.parse(savedLabels);
         console.log("Etiquetas cargadas:", labelsRef.current);
+      }
+      
+      // Cargar moldes matemáticos (Centroides)
+      const savedCentroids = localStorage.getItem("lsv-centroids");
+      if (savedCentroids) {
+        centroidsRef.current = JSON.parse(savedCentroids);
+        console.log("Moldes de validación cargados.");
       }
       
       setIsModelReady(true);
@@ -71,7 +80,13 @@ export function useSignTranslation() {
    * Procesa el frame completo, hace la inferencia y devuelve la traducción estabilizada
    */
   const translateFrame = useCallback((frame) => {
-    if (!isModelReady || !model || !frame) return null;
+    if (!isModelReady || !model) return null;
+
+    if (!frame) {
+      setCurrentTranslation("");
+      predictionHistoryRef.current = [];
+      return null;
+    }
 
     const features = extractFeatures(frame);
     if (!features) {
@@ -87,48 +102,85 @@ export function useSignTranslation() {
         const prediction = model.predict(inputTensor);
         const probabilities = prediction.dataSync();
         
-        // Encontrar la clase con mayor probabilidad
+        // Encontrar la clase con mayor probabilidad y la segunda mayor (para el vigilante)
         let maxProb = 0;
         let maxIndex = 0;
+        let secondMaxProb = 0;
+        
         for (let i = 0; i < probabilities.length; i++) {
           if (probabilities[i] > maxProb) {
+            secondMaxProb = maxProb;
             maxProb = probabilities[i];
             maxIndex = i;
+          } else if (probabilities[i] > secondMaxProb) {
+            secondMaxProb = probabilities[i];
           }
         }
 
-        // Exigir casi 100% de seguridad (0.95) a la red neuronal
-        if (maxProb > 0.95) {
+        // Vigilante Estricto: Exigir 95% de seguridad y que el modelo no esté dudando
+        // (la diferencia entre la mejor opción y la segunda debe ser amplia)
+        if (maxProb >= 0.95 && (maxProb - secondMaxProb) > 0.4) {
           const predictedLabel = labelsRef.current[maxIndex] || `Seña ${maxIndex}`;
           
-          // Agregar al historial para suavizado (evitar parpadeos)
-          predictionHistoryRef.current.push(predictedLabel);
-          if (predictionHistoryRef.current.length > 5) {
-            predictionHistoryRef.current.shift(); // Mantener solo los últimos 5
+          // === VALIDADOR DE DISTANCIA MATEMÁTICA (Filtro Anti-Desconocidos) ===
+          let isValid = true;
+          if (predictedLabel !== "REPOSO" && centroidsRef.current[predictedLabel]) {
+            const centroid = centroidsRef.current[predictedLabel];
+            const distance = calculateDistance(features, centroid);
+            
+            // Log para calibrar: Puedes ver este valor en la consola de Chrome (F12)
+            // console.log(`Seña: ${predictedLabel} | Confianza: ${maxProb.toFixed(2)} | Distancia: ${distance.toFixed(2)}`);
+            
+            // Umbral calibrado de distancia geométrica. 
+            // 3.5 es más permisivo para variaciones naturales de la mano.
+            if (distance > 3.5) {
+              isValid = false;
+            }
           }
 
-          if (predictionHistoryRef.current.length === 5) {
-            const counts = {};
-            let dominantLabel = predictedLabel;
-            let maxCount = 0;
-            
-            for (const label of predictionHistoryRef.current) {
-              counts[label] = (counts[label] || 0) + 1;
-              if (counts[label] > maxCount) {
-                maxCount = counts[label];
-                dominantLabel = label;
+          if (isValid) {
+            // Agregar al historial para suavizado (evitar parpadeos)
+            predictionHistoryRef.current.push(predictedLabel);
+            if (predictionHistoryRef.current.length > 6) {
+              predictionHistoryRef.current.shift(); // Mantener solo los últimos 6
+            }
+
+            if (predictionHistoryRef.current.length === 6) {
+              const counts = {};
+              let dominantLabel = predictedLabel;
+              let maxCount = 0;
+              
+              for (const label of predictionHistoryRef.current) {
+                counts[label] = (counts[label] || 0) + 1;
+                if (counts[label] > maxCount) {
+                  maxCount = counts[label];
+                  dominantLabel = label;
+                }
+              }
+              
+              // Requerir PERFECCIÓN: 6 de 6 frames idénticos
+              if (maxCount === 6) {
+                const labelUpper = dominantLabel.toUpperCase();
+                if (labelUpper === "REPOSO" || labelUpper === "NADA" || labelUpper === "..." || labelUpper === "RUIDO") {
+                  setCurrentTranslation(""); // Ignorar la basura silenciosamente
+                } else {
+                  setCurrentTranslation(dominantLabel);
+                }
               }
             }
-            
-            // Requerir PERFECCIÓN: 5 de 5 frames idénticos para evitar CUALQUIER lectura accidental
-            if (maxCount === 5) {
-              const labelUpper = dominantLabel.toUpperCase();
-              if (labelUpper === "REPOSO" || labelUpper === "NADA" || labelUpper === "..." || labelUpper === "RUIDO") {
-                setCurrentTranslation(""); // Ignorar la basura silenciosamente
-              } else {
-                setCurrentTranslation(dominantLabel);
-              }
+          } else {
+            // Rechazado por el validador de distancia geométrica (era una seña desconocida)
+            if (predictionHistoryRef.current.length > 0) {
+              predictionHistoryRef.current = [];
+              setCurrentTranslation(""); 
             }
+          }
+        } else {
+          // Si el vigilante detecta dudas, no mostramos nada en pantalla
+          // y limpiamos el historial para obligar al usuario a hacer la seña bien
+          if (predictionHistoryRef.current.length > 0) {
+            predictionHistoryRef.current = [];
+            setCurrentTranslation(""); 
           }
         }
       } catch (error) {
