@@ -3,7 +3,7 @@
  * Detecta 33 puntos del cuerpo (torso, brazos, hombros)
  */
 
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { FilesetResolver, PoseLandmarker } from "@mediapipe/tasks-vision";
 import { WASM_CDN, MODEL_URLS, POSE_CONFIG } from "../utils/mediapipeConfig";
 
@@ -64,7 +64,7 @@ export function usePoseDetection() {
     };
   }, []);
 
-  return {
+  return useMemo(() => ({
     initialize,
     detect,
     isReady,
@@ -72,5 +72,5 @@ export function usePoseDetection() {
     setIsEnabled,
     isLoading,
     results: resultsRef,
-  };
+  }), [initialize, detect, isReady, isEnabled, isLoading]);
 }

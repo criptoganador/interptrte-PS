@@ -19,6 +19,20 @@
   flex: 1;
   overflow: hidden;
   position: relative;
+  gap: 0;
+}
+
+.side-panels {
+  display: flex;
+  flex-direction: column;
+  width: var(--panel-width);
+  min-width: var(--panel-width);
+  height: 100%;
+  border-left: 1px solid var(--glass-border);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  overflow-y: auto;
 }
 
 /* ============================================
@@ -386,21 +400,93 @@
 }
 
 /* ============================================
+   Subtitle / Translation Bar
+   ============================================ */
+.subtitle-bar {
+  position: absolute;
+  bottom: 20px; /* Separado un poco del borde inferior */
+  left: 50%;
+  transform: translateX(-50%);
+  width: 90%;
+  max-width: 800px;
+  z-index: 999; /* Por encima de todo */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-md) var(--space-lg);
+  background: rgba(0, 0, 0, 0.75); /* Fondo oscuro tipo cine */
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-medium);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.subtitle-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-md);
+  width: 100%;
+}
+
+.subtitle-icon {
+  font-size: 24px;
+  filter: drop-shadow(0 0 8px var(--color-primary-glow));
+}
+
+.subtitle-text {
+  font-size: 24px; /* Texto más grande */
+  font-weight: 700;
+  color: var(--text-primary);
+  text-align: center;
+  margin: 0;
+}
+
+.subtitle-indicators {
+  display: flex;
+  gap: var(--space-sm);
+  margin-top: 4px;
+}
+
+.indicator-badge {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px;
+  border-radius: var(--radius-full);
+  font-size: 12px;
+  font-weight: 600;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.hand-badge {
+  background: rgba(0, 255, 209, 0.15);
+  color: var(--color-primary);
+  border: 1px solid rgba(0, 255, 209, 0.3);
+}
+
+.face-badge {
+  background: rgba(167, 139, 250, 0.15);
+  color: var(--color-accent);
+  border: 1px solid rgba(167, 139, 250, 0.3);
+}
+
+/* ============================================
    Diagnostics Panel
    ============================================ */
 .diagnostics-panel {
-  width: var(--panel-width);
-  min-width: var(--panel-width);
-  height: 100%;
-  background: var(--glass-bg);
-  backdrop-filter: blur(var(--glass-blur));
-  -webkit-backdrop-filter: blur(var(--glass-blur));
-  border-left: 1px solid var(--glass-border);
-  overflow-y: auto;
+  width: 100%;
+  min-width: 100%;
+  height: auto;
+  border-left: none;
   padding: var(--space-lg);
   display: flex;
   flex-direction: column;
   gap: var(--space-md);
+  border-bottom: 1px solid var(--glass-border);
 }
 
 .panel-title {
@@ -617,6 +703,276 @@
   color: var(--text-tertiary);
   line-height: 1.6;
   text-align: center;
+}
+
+/* ============================================
+   AI Training Lab
+   ============================================ */
+.trainer-lab {
+  border-top: 1px solid var(--glass-border);
+  padding-top: var(--space-xl);
+}
+
+.upload-zone {
+  border: 2px dashed var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: var(--space-xl);
+  text-align: center;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  background: var(--bg-tertiary);
+}
+
+.upload-zone:hover {
+  border-color: var(--color-primary);
+  background: var(--color-primary-dim);
+}
+
+.upload-icon {
+  font-size: 32px;
+  display: block;
+  margin-bottom: var(--space-sm);
+}
+
+.trainer-controls {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.dataset-stats {
+  font-size: 12px;
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+  padding: var(--space-sm);
+  border-radius: var(--radius-md);
+}
+
+.progress-container {
+  margin: var(--space-sm) 0;
+}
+
+.accuracy-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--color-primary);
+  margin-bottom: 4px;
+  text-align: right;
+}
+
+.progress-bar-bg {
+  height: 8px;
+  background: var(--bg-tertiary);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: var(--color-primary);
+  box-shadow: 0 0 10px var(--color-primary-glow);
+  transition: width 0.3s ease;
+}
+
+.button-group {
+  display: flex;
+  gap: var(--space-sm);
+}
+
+.action-button.train {
+  flex: 2;
+  background: var(--color-accent-dim);
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+.action-button.train:hover:not(:disabled) {
+  background: var(--color-accent);
+  color: var(--bg-primary);
+}
+
+.action-button.save {
+  flex: 1;
+  background: var(--color-success-dim);
+  color: var(--color-success);
+  border-color: var(--color-success);
+}
+
+.training-logs {
+  margin-top: var(--space-md);
+  background: #000;
+  border-radius: var(--radius-md);
+  padding: var(--space-sm);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: #0f0;
+  height: 100px;
+  overflow-y: auto;
+  border: 1px solid #333;
+}
+
+.log-entry {
+  margin-bottom: 2px;
+  border-bottom: 1px solid #111;
+  padding-bottom: 2px;
+}
+
+/* ============================================
+   Trainer Panel
+   ============================================ */
+.trainer-panel {
+  padding: var(--space-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.input-group {
+  margin-bottom: var(--space-md);
+}
+
+.trainer-input {
+  width: 100%;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: var(--space-sm) var(--space-md);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  transition: all var(--transition-fast);
+}
+
+.trainer-input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px var(--color-primary-glow);
+}
+
+.rec-button {
+  width: 100%;
+  padding: var(--space-md);
+  border-radius: var(--radius-md);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  border: 1px solid var(--border-medium);
+}
+
+.rec-button:hover:not(:disabled) {
+  background: var(--bg-card);
+  border-color: var(--text-tertiary);
+}
+
+.rec-button.counting {
+  background: var(--color-warning-dim);
+  border-color: var(--color-warning);
+  color: var(--color-warning);
+}
+
+.rec-button.recording {
+  background: var(--color-danger-dim);
+  border-color: var(--color-danger);
+  color: var(--color-danger);
+  animation: pulse-red 1s infinite;
+}
+
+@keyframes pulse-red {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+.rec-icon {
+  font-size: 18px;
+  color: var(--color-danger);
+}
+
+.countdown-number {
+  font-size: 24px;
+  font-weight: 800;
+}
+
+.trainer-tip {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  text-align: center;
+  margin-top: var(--space-xs);
+}
+
+.samples-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 150px;
+  overflow-y: auto;
+  margin-top: var(--space-sm);
+}
+
+.sample-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  background: var(--bg-tertiary);
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.sample-label {
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+
+.sample-badge {
+  background: var(--color-primary);
+  color: var(--bg-primary);
+  padding: 1px 6px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.trainer-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  margin-top: auto;
+  padding-top: var(--space-md);
+}
+
+.action-button {
+  padding: var(--space-sm);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
+.action-button.export {
+  background: var(--color-primary-dim);
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+.action-button.export:hover {
+  background: var(--color-primary);
+  color: var(--bg-primary);
+}
+
+.action-button.clear:hover {
+  background: var(--color-danger-dim);
+  color: var(--color-danger);
+  border-color: var(--color-danger);
 }
 
 /* ============================================

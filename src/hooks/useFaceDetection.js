@@ -3,7 +3,7 @@
  * Detecta 478 puntos faciales + blendshapes para expresiones
  */
 
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { FilesetResolver, FaceLandmarker } from "@mediapipe/tasks-vision";
 import { WASM_CDN, MODEL_URLS, FACE_CONFIG } from "../utils/mediapipeConfig";
 
@@ -80,7 +80,7 @@ export function useFaceDetection() {
     };
   }, []);
 
-  return {
+  return useMemo(() => ({
     initialize,
     detect,
     getTopExpressions,
@@ -89,5 +89,5 @@ export function useFaceDetection() {
     setIsEnabled,
     isLoading,
     results: resultsRef,
-  };
+  }), [initialize, detect, getTopExpressions, isReady, isEnabled, isLoading]);
 }

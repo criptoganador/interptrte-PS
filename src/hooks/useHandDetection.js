@@ -3,7 +3,7 @@
  * Detecta hasta 2 manos con 21 landmarks cada una
  */
 
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { FilesetResolver, HandLandmarker } from "@mediapipe/tasks-vision";
 import { WASM_CDN, MODEL_URLS, HAND_CONFIG } from "../utils/mediapipeConfig";
 
@@ -68,7 +68,7 @@ export function useHandDetection() {
     };
   }, []);
 
-  return {
+  return useMemo(() => ({
     initialize,
     detect,
     isReady,
@@ -76,5 +76,5 @@ export function useHandDetection() {
     setIsEnabled,
     isLoading,
     results: resultsRef,
-  };
+  }), [initialize, detect, isReady, isEnabled, isLoading]);
 }

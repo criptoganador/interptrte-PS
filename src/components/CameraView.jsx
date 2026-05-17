@@ -15,17 +15,43 @@ import {
   drawPoseLandmarks,
 } from "../utils/drawingUtils";
 
-export function CameraView({ onDiagnosticsUpdate }) {
+export function CameraView({ onDiagnosticsUpdate, onFrameRecord, isRecording, collector, translation }) {
   const canvasRef = useRef(null);
   const animationRef = useRef(null);
   const fpsRef = useRef({ frames: 0, lastTime: performance.now(), value: 0 });
   const lastTimestampRef = useRef(0);
+  const lastDiagUpdateRef = useRef(0); // Para el throttle de diagnósticos
   const [isInitialized, setIsInitialized] = useState(false);
+  const [sentence, setSentence] = useState([]); // Estado para la frase completa
+
+  // Auto-hablar y limpiar frase tras 4 segundos de inactividad
+  useEffect(() => {
+    if (sentence.length > 0) {
+      const timer = setTimeout(() => {
+        if (sentence.length > 1) {
+          // Si hay más de una palabra, la lee de corrido con mejor fluidez
+          translation.speakText(sentence.join(" "));
+        }
+        setSentence([]); // Limpiar la pantalla para la siguiente oración
+      }, 4000); // 4 segundos de pausa
+
+      return () => clearTimeout(timer);
+    }
+  }, [sentence, translation]);
 
   const camera = useCamera();
   const handDetection = useHandDetection();
   const faceDetection = useFaceDetection();
   const poseDetection = usePoseDetection();
+
+  // Ref para acceder siempre a la última traducción en el loop sin causar re-renders
+  const translationRef = useRef(translation);
+  useEffect(() => {
+    translationRef.current = translation;
+  }, [translation]);
+
+  // Para evitar hablar múltiples veces la misma seña seguida
+  const lastSpokenRef = useRef("");
 
   // Inicializar todo al montar
   useEffect(() => {
@@ -117,8 +143,49 @@ export function CameraView({ onDiagnosticsUpdate }) {
       }
     }
 
-    // === ACTUALIZAR DIAGNÓSTICOS ===
-    if (onDiagnosticsUpdate) {
+    // === GRABACIÓN DE DATOS (HITO 2) ===
+    if (isRecording && onFrameRecord) {
+      onFrameRecord({
+        hands: handResults?.landmarks || [],
+        handednesses: handResults?.handednesses?.map(h => h[0]?.categoryName) || [],
+        face: faceResults?.faceLandmarks?.[0] || [],
+        pose: poseResults?.landmarks?.[0] || [],
+        blendshapes: faceResults?.faceBlendshapes?.[0]?.categories || []
+      });
+    } else {
+      // === TRADUCCIÓN EN TIEMPO REAL (HITO 4) ===
+      // Solo traducimos si NO estamos grabando muestras
+      let currentSign = null;
+      
+      if (handResults && handResults.landmarks.length > 0) {
+        currentSign = translationRef.current.translateFrame({
+          hands: handResults.landmarks,
+          handednesses: handResults.handednesses?.map(h => h[0]?.categoryName) || [],
+          pose: poseResults?.landmarks?.[0] || []
+        });
+      } else {
+        // Le avisamos a la IA que no hay manos para que limpie su historial
+        currentSign = translationRef.current.translateFrame(null);
+        // Si baja la mano, olvidamos la última seña que dijimos
+        lastSpokenRef.current = "";
+      }
+      
+      // Si hay una seña nueva y estable, y es diferente a la última hablada
+      if (currentSign && currentSign !== lastSpokenRef.current) {
+        lastSpokenRef.current = currentSign;
+        
+        // Añadir a la oración
+        setSentence(prev => [...prev, currentSign]);
+        
+        // Hablar automáticamente
+        translationRef.current.speakText(currentSign);
+      }
+    }
+
+    // === ACTUALIZAR DIAGNÓSTICOS (Throttle: 200ms) ===
+    if (onDiagnosticsUpdate && (now - lastDiagUpdateRef.current > 200)) {
+      lastDiagUpdateRef.current = now;
+      
       const topExpressions = faceResults?.faceBlendshapes
         ? faceDetection.getTopExpressions(faceResults.faceBlendshapes, 5)
         : [];
@@ -140,7 +207,7 @@ export function CameraView({ onDiagnosticsUpdate }) {
     }
 
     animationRef.current = requestAnimationFrame(detectionLoop);
-  }, [camera.videoRef, handDetection, faceDetection, poseDetection, onDiagnosticsUpdate]);
+  }, [camera.videoRef, handDetection, faceDetection, poseDetection, onDiagnosticsUpdate, onFrameRecord, isRecording]);
 
   // Iniciar loop cuando todo esté listo
   useEffect(() => {
@@ -234,6 +301,79 @@ export function CameraView({ onDiagnosticsUpdate }) {
           }`}
         />
       )}
+
+      {/* Barra de subtítulos / traducción / oraciones */}
+      <div className="subtitle-bar" id="subtitle-bar" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+        
+        {/* Línea Superior: La frase construida */}
+        {!isRecording && sentence.length > 0 && (
+          <div className="sentence-container" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', marginBottom: '8px', paddingBottom: '8px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+            <p className="sentence-text" style={{ fontSize: '1.4rem', color: '#fff', fontWeight: 'bold', margin: 0, textAlign: 'center' }}>
+              {sentence.length > 7 
+                ? "... " + sentence.slice(-7).join(" ") 
+                : sentence.join(" ")}
+            </p>
+          </div>
+        )}
+
+        {/* Línea Inferior: La seña actual o estado de grabación */}
+        <div className="subtitle-content-bottom" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div className="subtitle-content" style={{ flex: 1 }}>
+            <span className="subtitle-icon">
+              {isRecording ? "🔴" : collector?.countdown > 0 ? "⏳" : translation.currentTranslation ? "🗣️" : "🤟"}
+            </span>
+            <p className={`subtitle-text ${isRecording || translation.currentTranslation ? 'detected' : ''}`} id="subtitle-text" style={{ fontSize: isRecording ? '1.2rem' : '1.1rem', color: translation.currentTranslation ? 'var(--color-primary)' : 'inherit' }}>
+              {collector?.countdown > 0 
+                ? `Prepárate... ${collector.countdown}` 
+                : isRecording 
+                  ? `GRABANDO: ${collector.currentLabel || 'SEÑA'}` 
+                  : translation.currentTranslation 
+                    ? `Detectando: [ ${translation.currentTranslation} ]`
+                    : sentence.length === 0 
+                      ? "Empieza a hacer señas para armar una frase..."
+                      : "Sigue haciendo señas..."}
+            </p>
+          </div>
+          
+          <div className="subtitle-indicators" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {translation.voices && translation.voices.length > 0 && (
+              <select 
+                value={translation.selectedVoiceURI} 
+                onChange={(e) => translation.changeVoice(e.target.value)}
+                style={{ 
+                  background: 'rgba(0,0,0,0.5)', 
+                  color: 'white', 
+                  border: '1px solid rgba(255,255,255,0.3)', 
+                  padding: '4px', 
+                  borderRadius: '4px',
+                  fontSize: '0.85rem',
+                  outline: 'none',
+                  cursor: 'pointer',
+                  maxWidth: '120px',
+                  textOverflow: 'ellipsis'
+                }}
+                title="Seleccionar Voz"
+              >
+                {translation.voices.map(v => (
+                  <option key={v.voiceURI} value={v.voiceURI}>
+                    {v.name.includes("Sabina") || v.name.includes("Helena") || v.name.includes("Laura") ? "👩 Voz Mujer" : 
+                     v.name.includes("Pablo") || v.name.includes("Tomas") ? "👨 Voz Hombre" : 
+                     `🗣️ ${v.name.split(' ')[1] || 'Voz'}`}
+                  </option>
+                ))}
+              </select>
+            )}
+            {handDetection.results?.current?.landmarks?.length > 0 && (
+              <span className="indicator-badge hand-badge">
+                🖐️ {handDetection.results.current.landmarks.length} mano{handDetection.results.current.landmarks.length > 1 ? "s" : ""}
+              </span>
+            )}
+            {faceDetection.results?.current?.faceLandmarks?.length > 0 && (
+              <span className="indicator-badge face-badge">😊 Rostro</span>
+            )}
+          </div>
+        </div>
+      </div>
 
       {/* Exponer detectores al padre */}
       <DetectorExposer

@@ -7,6 +7,10 @@ import { useState, useRef, useCallback } from "react";
 import { Header } from "./components/Header";
 import { CameraView } from "./components/CameraView";
 import { DiagnosticsPanel } from "./components/DiagnosticsPanel";
+import { TrainerPanel } from "./components/TrainerPanel";
+import { SignTrainer } from "./components/SignTrainer";
+import { useDataCollector } from "./hooks/useDataCollector";
+import { useSignTranslation } from "./hooks/useSignTranslation";
 import "./App.css";
 
 function App() {
@@ -24,6 +28,9 @@ function App() {
       pose: "loading",
     },
   });
+
+  const collector = useDataCollector();
+  const translation = useSignTranslation();
 
   // Refs para los detectores (se llenan desde CameraView)
   const detectorsRef = useRef(null);
@@ -66,8 +73,21 @@ function App() {
       />
 
       <main className="app-main" id="app-main">
-        <CameraView onDiagnosticsUpdate={handleDiagnosticsUpdate} />
-        <DiagnosticsPanel diagnostics={diagnostics} />
+        <CameraView 
+          onDiagnosticsUpdate={handleDiagnosticsUpdate} 
+          onFrameRecord={collector.recordFrame}
+          isRecording={collector.isRecording}
+          collector={collector}
+          translation={translation}
+        />
+        <div className="side-panels">
+          <DiagnosticsPanel diagnostics={diagnostics} />
+          <TrainerPanel collector={collector} />
+          <SignTrainer 
+            dataset={collector._dataset || collector.dataset} 
+            onModelTrained={translation.loadModel}
+          />
+        </div>
       </main>
     </div>
   );
