@@ -64,6 +64,7 @@ function App() {
 
   const [activeRightTab, setActiveRightTab] = useState("chat");
   const [isCompact, setIsCompact] = useState(window.innerWidth <= 900);
+  const [isTheatreMode, setIsTheatreMode] = useState(false);
 
   useEffect(() => {
     const handleResize = () => {
@@ -83,13 +84,15 @@ function App() {
         poseDetection={detectors.poseDetection}
       />
 
-      <main className="app-main" id="app-main">
+      <main className={`app-main ${isTheatreMode ? "theatre-active" : ""}`} id="app-main">
         <CameraView 
           onDiagnosticsUpdate={handleDiagnosticsUpdate} 
           onFrameRecord={collectorWithUnload.recordFrame}
           isRecording={collectorWithUnload.isRecording}
           collector={collectorWithUnload}
           translation={translation}
+          isTheatreMode={isTheatreMode}
+          onToggleTheatreMode={() => setIsTheatreMode(prev => !prev)}
         />
         
         {/* PANEL CENTRAL: MODO OYENTE O ENTRENADOR (Según el tamaño) */}
@@ -158,7 +161,7 @@ function App() {
         </div>
 
         {/* PANEL SECUNDARIO DESKTOP (Solo visible si hay espacio amplio) */}
-        {!isCompact && (
+        {!isCompact && !isTheatreMode && (
           <div className="side-panels">
             <DiagnosticsPanel diagnostics={diagnostics} />
             <TrainerPanel collector={collectorWithUnload} />

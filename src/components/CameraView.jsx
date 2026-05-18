@@ -15,7 +15,15 @@ import {
   drawPoseLandmarks,
 } from "../utils/drawingUtils";
 
-export function CameraView({ onDiagnosticsUpdate, onFrameRecord, isRecording, collector, translation }) {
+export function CameraView({ 
+  onDiagnosticsUpdate, 
+  onFrameRecord, 
+  isRecording, 
+  collector, 
+  translation,
+  isTheatreMode,
+  onToggleTheatreMode
+}) {
   const canvasRef = useRef(null);
   const animationRef = useRef(null);
   const fpsRef = useRef(null);
@@ -442,6 +450,40 @@ export function CameraView({ onDiagnosticsUpdate, onFrameRecord, isRecording, co
 
           <span className="youtube-badge cc">CC</span>
           <span className="youtube-badge hd">HD</span>
+
+          {/* Botón de Modo Cine / Teatro estilo YouTube */}
+          <button 
+            className="youtube-control-btn theatre-toggle-btn"
+            onClick={onToggleTheatreMode}
+            title={isTheatreMode ? "Modo por defecto" : "Modo cine (Agrandar cámara)"}
+            style={{
+              background: "transparent",
+              border: "none",
+              color: "white",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: "4px",
+              opacity: 0.8,
+              transition: "opacity 0.15s, transform 0.15s",
+              outline: "none"
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.opacity = 1; e.currentTarget.style.transform = "scale(1.1)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.opacity = 0.8; e.currentTarget.style.transform = "scale(1)"; }}
+          >
+            {isTheatreMode ? (
+              // Icono de modo por defecto (pantalla más pequeña)
+              <svg viewBox="0 0 36 36" width="22" height="22" fill="white">
+                <path d="M25 17H11v2h14v-2zm3-6H8c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h20c1.1 0 2-.9 2-2V13c0-1.1-.9-2-2-2zm-1 11H9V14h18v8z" />
+              </svg>
+            ) : (
+              // Icono de modo cine (pantalla ancha)
+              <svg viewBox="0 0 36 36" width="22" height="22" fill="white">
+                <path d="M28 11H8c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h20c1.1 0 2-.9 2-2V13c0-1.1-.9-2-2-2zm-1 11H9v-8h18v8z" />
+              </svg>
+            )}
+          </button>
 
           {handsCount > 0 && (
             <span className="youtube-badge hands">

@@ -1,10 +1,12 @@
 /**
  * useDataCollector — Hook para capturar y gestionar secuencias de landmarks
  * Permite grabar muestras, contar repeticiones y exportar el dataset final.
+ * Ahora integrado con auto-guardado en Google Drive en tiempo real.
  */
 
 import { useState, useCallback, useRef, useEffect } from "react";
 import { get, set } from "idb-keyval";
+import { useGoogleDriveSync } from "./useGoogleDriveSync";
 
 export function useDataCollector() {
   const [dataset, setDataset] = useState([]);
@@ -14,7 +16,9 @@ export function useDataCollector() {
   const [samplesCount, setSamplesCount] = useState({});
   const [isLoaded, setIsLoaded] = useState(false); // Para evitar sobrescribir al montar
 
-  // Carga inicial desde la base de datos
+  const gdrive = useGoogleDriveSync();
+
+  // Carga inicial desde la base de datos local
   useEffect(() => {
     get("lsv-dataset").then((savedData) => {
       if (savedData && savedData.length > 0) {
@@ -25,21 +29,60 @@ export function useDataCollector() {
           counts[s.label] = (counts[s.label] || 0) + 1;
         });
         setSamplesCount(counts);
-        console.log(`💾 Cargadas ${savedData.length} muestras desde la base de datos.`);
+        console.log(`💾 Cargadas ${savedData.length} muestras desde la base de datos local.`);
       }
       setIsLoaded(true);
     }).catch(err => {
-      console.error("Error leyendo base de datos:", err);
+      console.error("Error leyendo base de datos local:", err);
       setIsLoaded(true);
     });
   }, []);
 
-  // Sincronización automática cada vez que el dataset cambia
+  // Sincronización automática con la base de datos local
   useEffect(() => {
     if (isLoaded) {
-      set("lsv-dataset", dataset).catch(err => console.error("Error guardando en base de datos:", err));
+      set("lsv-dataset", dataset).catch(err => console.error("Error guardando en base de datos local:", err));
     }
   }, [dataset, isLoaded]);
+
+  // Sincronización automática con Google Drive en tiempo real (al grabar o quitar señas)
+  useEffect(() => {
+    if (isLoaded && gdrive.isConnected && dataset.length >= 0) {
+      // Disparar sincronización en la nube en segundo plano
+      gdrive.syncDataset(dataset);
+    }
+  }, [dataset, isLoaded, gdrive.isConnected, gdrive]);
+
+  // Cargar y fusionar dataset desde Google Drive al conectar la cuenta
+  useEffect(() => {
+    if (gdrive.isConnected) {
+      gdrive.downloadDataset().then((cloudDataset) => {
+        if (cloudDataset && cloudDataset.length > 0) {
+          const confirmMerge = window.confirm(
+            `☁️ Se encontró un respaldo en tu Google Drive con ${cloudDataset.length} muestras. ¿Deseas importarlo y fusionarlo con tus señas locales actuales?`
+          );
+          if (confirmMerge) {
+            setDataset((prev) => {
+              // Fusionar sin duplicados usando el timestamp único de cada muestra
+              const existingTimestamps = new Set(prev.map(s => s.timestamp));
+              const newSamples = cloudDataset.filter(s => !existingTimestamps.has(s.timestamp));
+              const merged = [...prev, ...newSamples];
+              
+              // Reconstruir contadores de muestras
+              const counts = {};
+              merged.forEach(s => {
+                counts[s.label] = (counts[s.label] || 0) + 1;
+              });
+              setSamplesCount(counts);
+              
+              console.log(`✅ Fusión completada. Total muestras: ${merged.length}`);
+              return merged;
+            });
+          }
+        }
+      }).catch(err => console.error("❌ Error descargando respaldo de Drive:", err));
+    }
+  }, [gdrive.isConnected, gdrive]);
 
   // Referencias para evitar problemas de cierres (closures) en procesos asíncronos
   const currentSequenceRef = useRef([]);
@@ -138,17 +181,16 @@ export function useDataCollector() {
   }, [dataset]);
 
   const clearDataset = () => {
-    // Eliminamos la ventana de confirmación porque el navegador la estaba bloqueando
     setDataset([]);
     setSamplesCount({});
     
-    // Borrar explícitamente de la base de datos
+    // Borrar de IndexedDB
     set("lsv-dataset", []).catch(err => console.error("Error al limpiar BD:", err));
     
-    // También borrar el modelo entrenado
+    // Borrar el modelo entrenado
     localStorage.removeItem("lsv-labels");
     
-    console.log("🧹 Dataset y base de datos limpiados directamente.");
+    console.log("🧹 Dataset y base de datos local limpiados.");
     alert("¡Base de datos borrada con éxito!");
   };
 
@@ -187,6 +229,7 @@ export function useDataCollector() {
     clearDataset,
     undoLastSample,
     dataset,
-    datasetLength: dataset.length
+    datasetLength: dataset.length,
+    gdrive // Exponer toda la instancia de sincronización con Google Drive
   };
 }
