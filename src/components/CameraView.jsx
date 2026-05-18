@@ -27,13 +27,20 @@ export function CameraView({ onDiagnosticsUpdate, onFrameRecord, isRecording, co
   const handsCountRef = useRef(0);
   const [sentence, setSentence] = useState([]); // Estado para la frase completa
 
+  // Referencia para mantener actualizado el prop translation sin provocar re-creación de callbacks
+  const translationRef = useRef(translation);
+  
+  useEffect(() => {
+    translationRef.current = translation;
+  }, [translation]);
+
   // Auto-hablar y limpiar frase tras 3 segundos de inactividad
   useEffect(() => {
     if (sentence.length > 0) {
       const timer = setTimeout(() => {
         if (sentence.length > 1) {
           // Si hay más de una palabra, la lee de corrido con mejor fluidez
-          translation.speakText(sentence.join(" "));
+          translationRef.current.speakText(sentence.join(" "));
         }
         setSentence([]); // Limpiar la pantalla para la siguiente oración
       }, 3000); // 3 segundos de pausa
@@ -41,7 +48,6 @@ export function CameraView({ onDiagnosticsUpdate, onFrameRecord, isRecording, co
       return () => clearTimeout(timer);
     }
     // Solo dependemos de 'sentence' para que los updates del modelo no reseteen el timer infinito
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sentence]);
 
   const {
@@ -178,14 +184,14 @@ export function CameraView({ onDiagnosticsUpdate, onFrameRecord, isRecording, co
       let currentSign = null;
       
       if (handResults && handResults.landmarks.length > 0) {
-        currentSign = translation.translateFrame({
+        currentSign = translationRef.current.translateFrame({
           hands: handResults.landmarks,
           handednesses: handResults.handednesses?.map(h => h[0]?.categoryName) || [],
           pose: poseResults?.landmarks?.[0] || []
         });
       } else {
         // Le avisamos a la IA que no hay manos para que limpie su historial
-        currentSign = translation.translateFrame(null);
+        currentSign = translationRef.current.translateFrame(null);
         // Si baja la mano, olvidamos la última seña que dijimos
         lastSpokenRef.current = "";
       }
@@ -198,7 +204,7 @@ export function CameraView({ onDiagnosticsUpdate, onFrameRecord, isRecording, co
         setSentence(prev => [...prev, currentSign]);
         
         // Hablar automáticamente
-        translation.speakText(currentSign);
+        translationRef.current.speakText(currentSign);
       }
     }
 
@@ -227,7 +233,7 @@ export function CameraView({ onDiagnosticsUpdate, onFrameRecord, isRecording, co
     }
 
     animationRef.current = requestAnimationFrame(detectionLoopRef.current);
-  }, [cameraVideoRef, handDetection, faceDetection, poseDetection, onDiagnosticsUpdate, onFrameRecord, isRecording, translation]);
+  }, [cameraVideoRef, handDetection, faceDetection, poseDetection, onDiagnosticsUpdate, onFrameRecord, isRecording]);
 
   // Sincronizar referencia del loop para evitar TDZ en llamadas recursivas
   useEffect(() => {
