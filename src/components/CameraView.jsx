@@ -18,10 +18,13 @@ import {
 export function CameraView({ onDiagnosticsUpdate, onFrameRecord, isRecording, collector, translation }) {
   const canvasRef = useRef(null);
   const animationRef = useRef(null);
-  const fpsRef = useRef({ frames: 0, lastTime: performance.now(), value: 0 });
+  const fpsRef = useRef(null);
+  const detectionLoopRef = useRef(null);
   const lastTimestampRef = useRef(0);
   const lastDiagUpdateRef = useRef(0); // Para el throttle de diagnósticos
   const [isInitialized, setIsInitialized] = useState(false);
+  const [handsCount, setHandsCount] = useState(0);
+  const handsCountRef = useRef(0);
   const [sentence, setSentence] = useState([]); // Estado para la frase completa
 
   // Auto-hablar y limpiar frase tras 3 segundos de inactividad
@@ -30,7 +33,7 @@ export function CameraView({ onDiagnosticsUpdate, onFrameRecord, isRecording, co
       const timer = setTimeout(() => {
         if (sentence.length > 1) {
           // Si hay más de una palabra, la lee de corrido con mejor fluidez
-          translationRef.current.speakText(sentence.join(" "));
+          translation.speakText(sentence.join(" "));
         }
         setSentence([]); // Limpiar la pantalla para la siguiente oración
       }, 3000); // 3 segundos de pausa
@@ -41,16 +44,23 @@ export function CameraView({ onDiagnosticsUpdate, onFrameRecord, isRecording, co
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sentence]);
 
-  const camera = useCamera();
+  const {
+    videoRef: cameraVideoRef,
+    status: cameraStatus,
+    error: cameraError,
+    deviceName: cameraDeviceName,
+    cameras: availableCameras,
+    selectedDeviceId,
+    switchCamera,
+    startCamera,
+    stopCamera,
+  } = useCamera();
+
   const handDetection = useHandDetection();
   const faceDetection = useFaceDetection();
   const poseDetection = usePoseDetection();
 
-  // Ref para acceder siempre a la última traducción en el loop sin causar re-renders
-  const translationRef = useRef(translation);
-  useEffect(() => {
-    translationRef.current = translation;
-  }, [translation]);
+
 
   // Para evitar hablar múltiples veces la misma seña seguida
   const lastSpokenRef = useRef("");
@@ -59,7 +69,7 @@ export function CameraView({ onDiagnosticsUpdate, onFrameRecord, isRecording, co
   useEffect(() => {
     async function init() {
       // Iniciar cámara
-      await camera.startCamera();
+      await startCamera();
 
       // Inicializar detectores en paralelo
       await Promise.all([
@@ -77,18 +87,18 @@ export function CameraView({ onDiagnosticsUpdate, onFrameRecord, isRecording, co
       if (animationRef.current) {
         cancelAnimationFrame(animationRef.current);
       }
-      camera.stopCamera();
+      stopCamera();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Loop de detección y renderizado
   const detectionLoop = useCallback(() => {
-    const video = camera.videoRef.current;
+    const video = cameraVideoRef.current;
     const canvas = canvasRef.current;
 
     if (!video || !canvas || video.readyState < 2) {
-      animationRef.current = requestAnimationFrame(detectionLoop);
+      animationRef.current = requestAnimationFrame(detectionLoopRef.current);
       return;
     }
 
@@ -103,10 +113,15 @@ export function CameraView({ onDiagnosticsUpdate, onFrameRecord, isRecording, co
 
     // Evitar timestamps duplicados (MediaPipe lo requiere)
     if (now <= lastTimestampRef.current) {
-      animationRef.current = requestAnimationFrame(detectionLoop);
+      animationRef.current = requestAnimationFrame(detectionLoopRef.current);
       return;
     }
     lastTimestampRef.current = now;
+
+    // Inicializar FPS lazily para evitar funciones impuras en render
+    if (!fpsRef.current) {
+      fpsRef.current = { frames: 0, lastTime: now, value: 0 };
+    }
 
     // Calcular FPS
     fpsRef.current.frames++;
@@ -120,29 +135,32 @@ export function CameraView({ onDiagnosticsUpdate, onFrameRecord, isRecording, co
     clearCanvas(ctx, canvas.width, canvas.height);
 
     // === DETECCIÓN ===
-    let handResults = null;
-    let faceResults = null;
-    let poseResults = null;
-
     // Detectar pose (dibujar primero, debajo de todo)
-    poseResults = poseDetection.detect(video, now);
+    const poseResults = poseDetection.detect(video, now);
     if (poseResults?.landmarks?.[0]) {
       drawPoseLandmarks(ctx, poseResults.landmarks[0], canvas.width, canvas.height);
     }
 
     // Detectar rostro
-    faceResults = faceDetection.detect(video, now);
+    const faceResults = faceDetection.detect(video, now);
     if (faceResults?.faceLandmarks?.[0]) {
       drawFaceMesh(ctx, faceResults.faceLandmarks[0], canvas.width, canvas.height);
     }
 
     // Detectar manos (dibujar encima de todo)
-    handResults = handDetection.detect(video, now);
+    const handResults = handDetection.detect(video, now);
     if (handResults?.landmarks) {
       for (let i = 0; i < handResults.landmarks.length; i++) {
         const handedness = handResults.handednesses?.[i]?.[0]?.categoryName || "Right";
         drawHandLandmarks(ctx, handResults.landmarks[i], handedness, canvas.width, canvas.height);
       }
+    }
+
+    // Sincronizar número de manos detectadas de forma reactiva (evitando render lag)
+    const currentHandsCount = handResults?.landmarks?.length || 0;
+    if (currentHandsCount !== handsCountRef.current) {
+      handsCountRef.current = currentHandsCount;
+      setHandsCount(currentHandsCount);
     }
 
     // === GRABACIÓN DE DATOS (HITO 2) ===
@@ -160,14 +178,14 @@ export function CameraView({ onDiagnosticsUpdate, onFrameRecord, isRecording, co
       let currentSign = null;
       
       if (handResults && handResults.landmarks.length > 0) {
-        currentSign = translationRef.current.translateFrame({
+        currentSign = translation.translateFrame({
           hands: handResults.landmarks,
           handednesses: handResults.handednesses?.map(h => h[0]?.categoryName) || [],
           pose: poseResults?.landmarks?.[0] || []
         });
       } else {
         // Le avisamos a la IA que no hay manos para que limpie su historial
-        currentSign = translationRef.current.translateFrame(null);
+        currentSign = translation.translateFrame(null);
         // Si baja la mano, olvidamos la última seña que dijimos
         lastSpokenRef.current = "";
       }
@@ -180,7 +198,7 @@ export function CameraView({ onDiagnosticsUpdate, onFrameRecord, isRecording, co
         setSentence(prev => [...prev, currentSign]);
         
         // Hablar automáticamente
-        translationRef.current.speakText(currentSign);
+        translation.speakText(currentSign);
       }
     }
 
@@ -208,12 +226,17 @@ export function CameraView({ onDiagnosticsUpdate, onFrameRecord, isRecording, co
       });
     }
 
-    animationRef.current = requestAnimationFrame(detectionLoop);
-  }, [camera.videoRef, handDetection, faceDetection, poseDetection, onDiagnosticsUpdate, onFrameRecord, isRecording]);
+    animationRef.current = requestAnimationFrame(detectionLoopRef.current);
+  }, [cameraVideoRef, handDetection, faceDetection, poseDetection, onDiagnosticsUpdate, onFrameRecord, isRecording, translation]);
+
+  // Sincronizar referencia del loop para evitar TDZ en llamadas recursivas
+  useEffect(() => {
+    detectionLoopRef.current = detectionLoop;
+  }, [detectionLoop]);
 
   // Iniciar loop cuando todo esté listo
   useEffect(() => {
-    if (camera.status === "ready" && isInitialized) {
+    if (cameraStatus === "ready" && isInitialized) {
       detectionLoop();
     }
 
@@ -222,15 +245,25 @@ export function CameraView({ onDiagnosticsUpdate, onFrameRecord, isRecording, co
         cancelAnimationFrame(animationRef.current);
       }
     };
-  }, [camera.status, isInitialized, detectionLoop]);
+  }, [cameraStatus, isInitialized, detectionLoop]);
 
-  // Exponer los detectores para el Header
+  // Exponer los detectores para el Header (fuera de render)
   useEffect(() => {
     if (onDiagnosticsUpdate) {
       onDiagnosticsUpdate((prev) => ({
         ...prev,
         _detectors: { handDetection, faceDetection, poseDetection },
-        _camera: camera,
+        _camera: {
+          videoRef: cameraVideoRef,
+          status: cameraStatus,
+          error: cameraError,
+          deviceName: cameraDeviceName,
+          cameras: availableCameras,
+          selectedDeviceId,
+          switchCamera,
+          startCamera,
+          stopCamera
+        },
       }));
     }
     // Solo al montar
@@ -240,11 +273,11 @@ export function CameraView({ onDiagnosticsUpdate, onFrameRecord, isRecording, co
   return (
     <div className="camera-view" id="camera-view">
       {/* Menú de selección de Cámara (solo visible si hay más de 1) */}
-      {camera.cameras && camera.cameras.length > 1 && (
+      {availableCameras && availableCameras.length > 1 && (
         <div style={{ position: 'absolute', top: '10px', left: '10px', zIndex: 50 }}>
           <select 
-            value={camera.selectedDeviceId} 
-            onChange={(e) => camera.switchCamera(e.target.value)}
+            value={selectedDeviceId} 
+            onChange={(e) => switchCamera(e.target.value)}
             style={{ 
               background: 'rgba(0,0,0,0.6)', 
               color: 'white', 
@@ -259,7 +292,7 @@ export function CameraView({ onDiagnosticsUpdate, onFrameRecord, isRecording, co
             }}
             title="Cambiar Cámara"
           >
-            {camera.cameras.map((cam, idx) => (
+            {availableCameras.map((cam, idx) => (
               <option key={cam.deviceId} value={cam.deviceId}>
                 📷 {cam.label || `Cámara ${idx + 1}`}
               </option>
@@ -269,12 +302,12 @@ export function CameraView({ onDiagnosticsUpdate, onFrameRecord, isRecording, co
       )}
 
       {/* Estado de carga */}
-      {(camera.status === "idle" || camera.status === "loading") && (
+      {(cameraStatus === "idle" || cameraStatus === "loading") && (
         <div className="camera-overlay loading-overlay" id="camera-loading">
           <div className="loading-content">
             <div className="loading-spinner-large" />
             <p className="loading-text">
-              {camera.status === "idle"
+              {cameraStatus === "idle"
                 ? "Preparando cámara..."
                 : "Conectando con PS3 Eye..."}
             </p>
@@ -289,15 +322,15 @@ export function CameraView({ onDiagnosticsUpdate, onFrameRecord, isRecording, co
       )}
 
       {/* Error */}
-      {(camera.status === "error" || camera.status === "denied") && (
+      {(cameraStatus === "error" || cameraStatus === "denied") && (
         <div className="camera-overlay error-overlay" id="camera-error">
           <div className="error-content">
             <span className="error-icon">⚠️</span>
-            <p className="error-text">{camera.error}</p>
+            <p className="error-text">{cameraError}</p>
             <button
               className="retry-button"
               id="btn-retry-camera"
-              onClick={camera.startCamera}
+              onClick={startCamera}
             >
               Reintentar
             </button>
@@ -307,7 +340,7 @@ export function CameraView({ onDiagnosticsUpdate, onFrameRecord, isRecording, co
 
       {/* Video (siempre presente pero puede estar oculto) */}
       <video
-        ref={camera.videoRef}
+        ref={cameraVideoRef}
         className="camera-video"
         id="camera-video"
         autoPlay
@@ -323,92 +356,106 @@ export function CameraView({ onDiagnosticsUpdate, onFrameRecord, isRecording, co
       />
 
       {/* Borde glow cuando detecta manos */}
-      {camera.status === "ready" && (
+      {cameraStatus === "ready" && (
         <div
           className={`detection-glow ${
-            handDetection.results?.current?.landmarks?.length > 0
+            handsCount > 0
               ? "glow-active"
               : ""
           }`}
         />
       )}
 
-      {/* Barra de subtítulos / traducción / oraciones */}
-      <div className="subtitle-bar" id="subtitle-bar" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+      {/* Subtítulos tipo YouTube (CC) */}
+      <div className="youtube-subtitles-container">
+        {collector?.countdown > 0 && (
+          <div className="youtube-cc-line">
+            ⏳ Prepárate... {collector.countdown}
+          </div>
+        )}
         
-        {/* Línea Superior: La frase construida */}
-        {!isRecording && sentence.length > 0 && (
-          <div className="sentence-container" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', marginBottom: '8px', paddingBottom: '8px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
-            <p className="sentence-text" style={{ fontSize: '1.4rem', color: '#fff', fontWeight: 'bold', margin: 0, textAlign: 'center' }}>
-              {sentence.length > 7 
-                ? "... " + sentence.slice(-7).join(" ") 
-                : sentence.join(" ")}
-            </p>
+        {isRecording && !collector?.countdown && (
+          <div className="youtube-cc-line recording">
+            🔴 GRABANDO SEÑA: {collector.currentLabel || 'SEÑA'}
           </div>
         )}
 
-        {/* Línea Inferior: La seña actual o estado de grabación */}
-        <div className="subtitle-content-bottom" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div className="subtitle-content" style={{ flex: 1 }}>
-            <span className="subtitle-icon">
-              {isRecording ? "🔴" : collector?.countdown > 0 ? "⏳" : translation.currentTranslation ? "🗣️" : "🤟"}
+        {!isRecording && !collector?.countdown && translation.currentTranslation && (
+          <div className="youtube-cc-line translation">
+            {translation.currentTranslation}
+          </div>
+        )}
+
+        {!isRecording && !collector?.countdown && !translation.currentTranslation && sentence.length > 0 && (
+          <div className="youtube-cc-line">
+            {sentence.join(" ")}
+          </div>
+        )}
+
+        {!isRecording && !collector?.countdown && !translation.currentTranslation && sentence.length === 0 && (
+          <div className="youtube-cc-line" style={{ opacity: 0.5, fontSize: '15px' }}>
+            [ Esperando señas en Lengua de Señas Venezolana ]
+          </div>
+        )}
+      </div>
+
+      {/* Barra de Controles tipo YouTube Player */}
+      <div className="youtube-controls-bar">
+        {/* Barra roja de reproducción decorativa */}
+        <div className="youtube-progress-line">
+          <div className="youtube-progress-fill" />
+        </div>
+
+        <div className="youtube-controls-left">
+          <div className="youtube-live-badge">
+            <span className="youtube-live-dot" />
+            En Vivo
+          </div>
+          <span className="youtube-device-info">
+            {cameraDeviceName || "Cámara Activa"}
+          </span>
+        </div>
+
+        <div className="youtube-controls-right">
+          {translation.voices && translation.voices.length > 0 && (
+            <select 
+              value={translation.selectedVoiceURI} 
+              onChange={(e) => translation.changeVoice(e.target.value)}
+              className="youtube-voice-select"
+              title="Seleccionar Voz"
+            >
+              {translation.voices.map(v => (
+                <option key={v.voiceURI} value={v.voiceURI}>
+                  {v.name.includes("Sabina") || v.name.includes("Helena") || v.name.includes("Laura") ? "👩 Voz Mujer" : 
+                   v.name.includes("Pablo") || v.name.includes("Tomas") ? "👨 Voz Hombre" : 
+                   `🗣️ ${v.name.split(' ')[1] || 'Voz'}`}
+                </option>
+              ))}
+            </select>
+          )}
+
+          <span className="youtube-badge cc">CC</span>
+          <span className="youtube-badge hd">HD</span>
+
+          {handsCount > 0 && (
+            <span className="youtube-badge hands">
+              🖐️ {handsCount} Mano{handsCount > 1 ? "s" : ""}
             </span>
-            <p className={`subtitle-text ${isRecording || translation.currentTranslation ? 'detected' : ''}`} id="subtitle-text" style={{ fontSize: isRecording ? '1.2rem' : '1.1rem', color: translation.currentTranslation ? 'var(--color-primary)' : 'inherit' }}>
-              {collector?.countdown > 0 
-                ? `Prepárate... ${collector.countdown}` 
-                : isRecording 
-                  ? `GRABANDO: ${collector.currentLabel || 'SEÑA'}` 
-                  : translation.currentTranslation 
-                    ? `Detectando: [ ${translation.currentTranslation} ]`
-                    : sentence.length === 0 
-                      ? "Empieza a hacer señas para armar una frase..."
-                      : "Sigue haciendo señas..."}
-            </p>
-          </div>
-          
-          <div className="subtitle-indicators" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            {translation.voices && translation.voices.length > 0 && (
-              <select 
-                value={translation.selectedVoiceURI} 
-                onChange={(e) => translation.changeVoice(e.target.value)}
-                style={{ 
-                  background: 'rgba(0,0,0,0.5)', 
-                  color: 'white', 
-                  border: '1px solid rgba(255,255,255,0.3)', 
-                  padding: '4px', 
-                  borderRadius: '4px',
-                  fontSize: '0.85rem',
-                  outline: 'none',
-                  cursor: 'pointer',
-                  maxWidth: '120px',
-                  textOverflow: 'ellipsis'
-                }}
-                title="Seleccionar Voz"
-              >
-                {translation.voices.map(v => (
-                  <option key={v.voiceURI} value={v.voiceURI}>
-                    {v.name.includes("Sabina") || v.name.includes("Helena") || v.name.includes("Laura") ? "👩 Voz Mujer" : 
-                     v.name.includes("Pablo") || v.name.includes("Tomas") ? "👨 Voz Hombre" : 
-                     `🗣️ ${v.name.split(' ')[1] || 'Voz'}`}
-                  </option>
-                ))}
-              </select>
-            )}
-            {handDetection.results?.current?.landmarks?.length > 0 && (
-              <span className="indicator-badge hand-badge">
-                🖐️ {handDetection.results.current.landmarks.length} mano{handDetection.results.current.landmarks.length > 1 ? "s" : ""}
-              </span>
-            )}
-            {faceDetection.results?.current?.faceLandmarks?.length > 0 && (
-              <span className="indicator-badge face-badge">😊 Rostro</span>
-            )}
-          </div>
+          )}
         </div>
       </div>
 
       {/* Exponer detectores al padre */}
       <DetectorExposer
-        camera={camera}
+        cameraRef={cameraVideoRef}
+        cameraStatus={cameraStatus}
+        cameraDeviceName={cameraDeviceName}
+        cameraError={cameraError}
+        availableCameras={availableCameras}
+        selectedDeviceId={selectedDeviceId}
+        switchCamera={switchCamera}
+        startCamera={startCamera}
+        stopCamera={stopCamera}
         handDetection={handDetection}
         faceDetection={faceDetection}
         poseDetection={poseDetection}
@@ -420,7 +467,20 @@ export function CameraView({ onDiagnosticsUpdate, onFrameRecord, isRecording, co
 /**
  * Componente invisible para pasar refs de detectores al padre via callback ref
  */
-function DetectorExposer({ camera, handDetection, faceDetection, poseDetection }) {
+function DetectorExposer({
+  cameraRef,
+  cameraStatus,
+  cameraDeviceName,
+  cameraError,
+  availableCameras,
+  selectedDeviceId,
+  switchCamera,
+  startCamera,
+  stopCamera,
+  handDetection,
+  faceDetection,
+  poseDetection
+}) {
   // Usamos un div invisible con data attrs para que el padre pueda acceder
   return (
     <div
@@ -428,7 +488,17 @@ function DetectorExposer({ camera, handDetection, faceDetection, poseDetection }
       ref={(el) => {
         if (el) {
           el._detectors = { handDetection, faceDetection, poseDetection };
-          el._camera = camera;
+          el._camera = {
+            videoRef: cameraRef,
+            status: cameraStatus,
+            error: cameraError,
+            deviceName: cameraDeviceName,
+            cameras: availableCameras,
+            selectedDeviceId,
+            switchCamera,
+            startCamera,
+            stopCamera
+          };
         }
       }}
       className="detector-exposer"

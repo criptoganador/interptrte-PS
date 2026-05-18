@@ -3,7 +3,7 @@
  * Integra CameraView, DiagnosticsPanel y Header
  */
 
-import { useState, useRef, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import { Header } from "./components/Header";
 import { CameraView } from "./components/CameraView";
 import { DiagnosticsPanel } from "./components/DiagnosticsPanel";
@@ -42,8 +42,12 @@ function App() {
     }
   }), [collector, translation]);
 
-  // Refs para los detectores (se llenan desde CameraView)
-  const detectorsRef = useRef(null);
+  // Estado para los detectores (se sincroniza desde CameraView para evitar lecturas de Ref en render)
+  const [detectors, setDetectors] = useState({
+    handDetection: { isEnabled: true, setIsEnabled: () => {}, isReady: false, isLoading: true },
+    faceDetection: { isEnabled: true, setIsEnabled: () => {}, isReady: false, isLoading: true },
+    poseDetection: { isEnabled: true, setIsEnabled: () => {}, isReady: false, isLoading: true },
+  });
 
   const handleDiagnosticsUpdate = useCallback((data) => {
     // Si es una función (del exposer), guardar refs
@@ -51,26 +55,23 @@ function App() {
 
     // Guardar referencia a detectores si vienen
     if (data._detectors) {
-      detectorsRef.current = data._detectors;
+      setDetectors(data._detectors);
       return;
     }
 
     setDiagnostics(data);
   }, []);
 
-  // Obtener detectores para el Header
-  const getDetectors = () => {
-    if (!detectorsRef.current) {
-      return {
-        handDetection: { isEnabled: true, setIsEnabled: () => {}, isReady: false, isLoading: true },
-        faceDetection: { isEnabled: true, setIsEnabled: () => {}, isReady: false, isLoading: true },
-        poseDetection: { isEnabled: true, setIsEnabled: () => {}, isReady: false, isLoading: true },
-      };
-    }
-    return detectorsRef.current;
-  };
+  const [activeRightTab, setActiveRightTab] = useState("chat");
+  const [isCompact, setIsCompact] = useState(window.innerWidth <= 900);
 
-  const detectors = getDetectors();
+  useEffect(() => {
+    const handleResize = () => {
+      setIsCompact(window.innerWidth <= 900);
+    };
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   return (
     <div className="app-container" id="app-container">
@@ -91,51 +92,114 @@ function App() {
           translation={translation}
         />
         
-        {/* PANEL CENTRAL: MODO OYENTE (Súper Visible) */}
+        {/* PANEL CENTRAL: MODO OYENTE O ENTRENADOR (Según el tamaño) */}
         <div className="listener-column">
-          <ListenerPanel dataset={collectorWithUnload._dataset || collectorWithUnload.dataset} />
-        </div>
+          {isCompact && (
+            <div className="column-tabs-selector">
+              <button 
+                className={`tab-btn ${activeRightTab === "chat" ? "active" : ""}`}
+                onClick={() => setActiveRightTab("chat")}
+              >
+                💬 Modo Oyente
+              </button>
+              <button 
+                className={`tab-btn ${activeRightTab === "trainer" ? "active" : ""}`}
+                onClick={() => setActiveRightTab("trainer")}
+              >
+                🧠 Entrenador e IA
+              </button>
+            </div>
+          )}
 
-        <div className="side-panels">
-          <DiagnosticsPanel diagnostics={diagnostics} />
-          <TrainerPanel collector={collectorWithUnload} />
-          <SignTrainer 
-            dataset={collectorWithUnload._dataset || collectorWithUnload.dataset} 
-            onModelTrained={translation.loadModel}
-          />
-          
-          {/* Selector de Voz (Movido aquí a petición del usuario) */}
-          {translation.voices && translation.voices.length > 0 && (
-            <section className="diag-section voice-selector" style={{ marginTop: '10px' }}>
-              <h3 className="section-title">Configuración de Voz</h3>
-              <div className="input-group">
-                <select 
-                  value={translation.selectedVoiceURI} 
-                  onChange={(e) => translation.changeVoice(e.target.value)}
-                  style={{ 
-                    width: '100%',
-                    background: 'rgba(255,255,255,0.05)', 
-                    color: 'white', 
-                    border: '1px solid rgba(255,255,255,0.1)', 
-                    padding: '8px', 
-                    borderRadius: '4px',
-                    fontSize: '0.9rem',
-                    outline: 'none',
-                    cursor: 'pointer'
-                  }}
-                >
-                  {translation.voices.filter(v => v.lang.startsWith("es")).map(v => (
-                    <option key={v.voiceURI} value={v.voiceURI} style={{ background: '#222', color: 'white' }}>
-                      {v.name.includes("Sabina") || v.name.includes("Helena") || v.name.includes("Laura") ? "👩 Voz Mujer" : 
-                       v.name.includes("Pablo") || v.name.includes("Tomas") ? "👨 Voz Hombre" : 
-                       `🗣️ ${v.name}`}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </section>
+          {(!isCompact || activeRightTab === "chat") ? (
+            <ListenerPanel dataset={collectorWithUnload._dataset || collectorWithUnload.dataset} />
+          ) : (
+            <div className="tab-trainer-content">
+              <TrainerPanel collector={collectorWithUnload} />
+              <SignTrainer 
+                dataset={collectorWithUnload._dataset || collectorWithUnload.dataset} 
+                onModelTrained={translation.loadModel}
+              />
+              <DiagnosticsPanel diagnostics={diagnostics} />
+              
+              {/* Selector de Voz */}
+              {translation.voices && translation.voices.length > 0 && (
+                <section className="diag-section voice-selector" style={{ marginTop: '10px' }}>
+                  <h3 className="section-title">Configuración de Voz</h3>
+                  <div className="input-group">
+                    <select 
+                      value={translation.selectedVoiceURI} 
+                      onChange={(e) => translation.changeVoice(e.target.value)}
+                      style={{ 
+                        width: '100%',
+                        background: 'rgba(255,255,255,0.05)', 
+                        color: 'white', 
+                        border: '1px solid rgba(255,255,255,0.1)', 
+                        padding: '8px', 
+                        borderRadius: '4px',
+                        fontSize: '0.9rem',
+                        outline: 'none',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {translation.voices.filter(v => v.lang.startsWith("es")).map(v => (
+                        <option key={v.voiceURI} value={v.voiceURI} style={{ background: '#222', color: 'white' }}>
+                          {v.name.includes("Sabina") || v.name.includes("Helena") || v.name.includes("Laura") ? "👩 Voz Mujer" : 
+                           v.name.includes("Pablo") || v.name.includes("Tomas") ? "👨 Voz Hombre" : 
+                           `🗣️ ${v.name}`}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </section>
+              )}
+            </div>
           )}
         </div>
+
+        {/* PANEL SECUNDARIO DESKTOP (Solo visible si hay espacio amplio) */}
+        {!isCompact && (
+          <div className="side-panels">
+            <DiagnosticsPanel diagnostics={diagnostics} />
+            <TrainerPanel collector={collectorWithUnload} />
+            <SignTrainer 
+              dataset={collectorWithUnload._dataset || collectorWithUnload.dataset} 
+              onModelTrained={translation.loadModel}
+            />
+            
+            {/* Selector de Voz */}
+            {translation.voices && translation.voices.length > 0 && (
+              <section className="diag-section voice-selector" style={{ marginTop: '10px' }}>
+                <h3 className="section-title">Configuración de Voz</h3>
+                <div className="input-group">
+                  <select 
+                    value={translation.selectedVoiceURI} 
+                    onChange={(e) => translation.changeVoice(e.target.value)}
+                    style={{ 
+                      width: '100%',
+                      background: 'rgba(255,255,255,0.05)', 
+                      color: 'white', 
+                      border: '1px solid rgba(255,255,255,0.1)', 
+                      padding: '8px', 
+                      borderRadius: '4px',
+                      fontSize: '0.9rem',
+                      outline: 'none',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {translation.voices.filter(v => v.lang.startsWith("es")).map(v => (
+                      <option key={v.voiceURI} value={v.voiceURI} style={{ background: '#222', color: 'white' }}>
+                        {v.name.includes("Sabina") || v.name.includes("Helena") || v.name.includes("Laura") ? "👩 Voz Mujer" : 
+                         v.name.includes("Pablo") || v.name.includes("Tomas") ? "👨 Voz Hombre" : 
+                         `🗣️ ${v.name}`}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </section>
+            )}
+          </div>
+        )}
       </main>
     </div>
   );

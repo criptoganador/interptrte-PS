@@ -3,7 +3,7 @@
  * Ahora completamente automatizado: toma el dataset de los props y guarda en IndexedDB.
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import { useState } from 'react';
 import * as tf from '@tensorflow/tfjs';
 import { extractFeatures } from '../utils/featureExtraction';
 
@@ -27,19 +27,27 @@ export function SignTrainer({ dataset, onModelTrained }) {
     const inputs = [];
     const outputs = [];
 
-    // Extraer características de las muestras grabadas por el usuario
+    // Extraer características de todos los frames válidos de las secuencias grabadas por el usuario
     jsonData.forEach(sample => {
-      const middleFrameIndex = Math.floor(sample.sequence.length / 2);
-      const frame = sample.sequence[middleFrameIndex];
+      let validFramesInSample = 0;
       
-      const features = extractFeatures(frame);
-      if (features) {
-        inputs.push(features);
-        const output = new Array(labels.length).fill(0);
-        output[labelMap[sample.label]] = 1;
-        outputs.push(output);
-      }
+      sample.sequence.forEach(frame => {
+        const features = extractFeatures(frame);
+        if (features) {
+          inputs.push(features);
+          const output = new Array(labels.length).fill(0);
+          output[labelMap[sample.label]] = 1;
+          outputs.push(output);
+          validFramesInSample++;
+        }
+      });
+      
+      console.log(`🧠 Muestra [${sample.label}]: Se cosecharon ${validFramesInSample} frames con manos/poses válidas.`);
     });
+
+    if (inputs.length === 0) {
+      return null;
+    }
 
     // === INYECCIÓN DE RUIDO SINTÉTICO MEJORADO (VIGILANTE) ===
     // Generamos datos "falsos" o "rotos" para enseñarle a la IA qué es basura.
@@ -86,7 +94,15 @@ export function SignTrainer({ dataset, onModelTrained }) {
       return;
     }
 
-    const { xs, ys, labels, inputSize, outputSize } = processData(dataset);
+    const processed = processData(dataset);
+    
+    if (!processed) {
+      addLog("⚠️ No se detectaron manos visibles en las muestras. Asegúrate de mostrar las manos en cámara al grabar.");
+      setTrainingStatus('idle');
+      return;
+    }
+
+    const { xs, ys, labels, inputSize, outputSize } = processed;
 
     if (labels.length < 2) { // Recuerda que 'labels' ya incluye 'REPOSO' por lo que si hay 1 seña del usuario, length es 2
       addLog("⚠️ Necesitas grabar al menos 1 seña.");
@@ -117,7 +133,7 @@ export function SignTrainer({ dataset, onModelTrained }) {
       epochs: 30, 
       validationSplit: 0.1, 
       callbacks: { 
-        onEpochEnd: (epoch, logs) => setProgress((epoch + 1) / 30) 
+        onEpochEnd: (epoch) => setProgress((epoch + 1) / 30) 
       } 
     });
 
@@ -127,7 +143,7 @@ export function SignTrainer({ dataset, onModelTrained }) {
     await model.save('indexeddb://lsv-model');
     localStorage.setItem("lsv-labels", JSON.stringify(labels));
 
-    // === CÁLCULO DE MOLDES (CENTROIDES) PARA VALIDACIÓN ===
+    // === CÁLCULO DE MOLDES (CENTROIDES) DE ALTA PRECISIÓN ===
     const centroids = {};
     labels.forEach(label => {
       if (label === "REPOSO") return;
@@ -135,10 +151,15 @@ export function SignTrainer({ dataset, onModelTrained }) {
       const samples = dataset.filter(item => item.label === label);
       if (samples.length === 0) return;
       
-      const allFeatures = samples.map(sample => {
-        const middleFrameIndex = Math.floor(sample.sequence.length / 2);
-        return extractFeatures(sample.sequence[middleFrameIndex]);
-      }).filter(Boolean);
+      const allFeatures = [];
+      samples.forEach(sample => {
+        sample.sequence.forEach(frame => {
+          const features = extractFeatures(frame);
+          if (features) {
+            allFeatures.push(features);
+          }
+        });
+      });
       
       if (allFeatures.length > 0) {
         const centroid = new Array(126).fill(0);
