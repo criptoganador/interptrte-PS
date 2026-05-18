@@ -53,6 +53,31 @@ export function useSignTranslation() {
     loadModel();
   }, [loadModel]);
 
+  // Eliminar el modelo y limpiar estados
+  const unloadModel = useCallback(async () => {
+    try {
+      console.log("Eliminando modelo de traducción de IndexedDB...");
+      await tf.io.removeModel("indexeddb://lsv-model");
+      console.log("🗑️ Modelo removido con éxito de IndexedDB.");
+    } catch (error) {
+      console.warn("⚠️ No se pudo eliminar el modelo de IndexedDB o no existía:", error);
+    }
+    
+    // Limpiar LocalStorage
+    localStorage.removeItem("lsv-labels");
+    localStorage.removeItem("lsv-centroids");
+    
+    // Limpiar estados y referencias
+    setModel(null);
+    setIsModelReady(false);
+    setCurrentTranslation("");
+    labelsRef.current = [];
+    centroidsRef.current = {};
+    predictionHistoryRef.current = [];
+    
+    console.log("🧹 Todos los estados del modelo en memoria han sido reseteados.");
+  }, []);
+
   // Cargar voces disponibles
   useEffect(() => {
     const loadVoices = () => {
@@ -226,6 +251,7 @@ export function useSignTranslation() {
     selectedVoiceURI,
     changeVoice,
     loadModel, // Exportamos para poder recargar desde el SignTrainer
+    unloadModel, // Exportado para permitir limpiar el cerebro en caliente
     setLabels: (labels) => { labelsRef.current = labels; }
   };
 }

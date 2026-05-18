@@ -1,13 +1,14 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 
-/**
- * Hook para usar el reconocimiento de voz nativo del navegador (Speech-to-Text).
- * @param {Function} onWordMatch - Callback que se ejecuta cuando se detecta una palabra finalizada.
- */
-export function useSpeechToText(onWordMatch) {
+export function useSpeechToText() {
   const [isListening, setIsListening] = useState(false);
-  const [transcript, setTranscript] = useState("");
+  const [messages, setMessages] = useState([]); // Historial de burbujas
+  const [finalTranscript, setFinalTranscript] = useState("");
+  const [interimTranscript, setInterimTranscript] = useState("");
+  
   const recognitionRef = useRef(null);
+  const timerRef = useRef(null);
+  const finalRef = useRef("");
 
   useEffect(() => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -17,31 +18,42 @@ export function useSpeechToText(onWordMatch) {
     }
 
     const recognition = new SpeechRecognition();
-    recognition.continuous = true; // Seguir escuchando aunque el usuario haga pausas
-    recognition.interimResults = false; // Solo queremos resultados finales para evitar falsos positivos
-    recognition.lang = "es-VE"; // Español de Venezuela
+    recognition.continuous = true; 
+    recognition.interimResults = true; 
+    recognition.lang = "es-VE"; 
 
     recognition.onresult = (event) => {
+      let currentInterim = "";
+      let currentFinal = "";
+      
       for (let i = event.resultIndex; i < event.results.length; ++i) {
         if (event.results[i].isFinal) {
-          const spokenText = event.results[i][0].transcript.trim();
-          console.log("🎙️ Escuchado:", spokenText);
-          
-          setTranscript(spokenText);
-          
-          // Separar la frase en palabras y enviarlas al callback
-          if (onWordMatch) {
-            const words = spokenText.toUpperCase().split(/\s+/);
-            words.forEach(word => {
-              // Limpiar puntuación básica
-              const cleanWord = word.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g,"");
-              if (cleanWord) {
-                onWordMatch(cleanWord);
-              }
-            });
-          }
+          currentFinal += event.results[i][0].transcript;
+        } else {
+          currentInterim += event.results[i][0].transcript;
         }
       }
+      
+      if (currentFinal) {
+        setFinalTranscript(prev => {
+          const newFinal = prev + currentFinal + " ";
+          finalRef.current = newFinal;
+          return newFinal;
+        });
+      }
+      setInterimTranscript(currentInterim);
+      
+      // Manejo de Cajas Dinámicas: Si hay 2.5s de silencio, crear nueva burbuja
+      if (timerRef.current) clearTimeout(timerRef.current);
+      
+      timerRef.current = setTimeout(() => {
+        if (finalRef.current.trim() !== "") {
+          const newText = finalRef.current.trim();
+          setMessages(prev => [...prev, { id: Date.now(), text: newText }]);
+          setFinalTranscript(""); // Limpiar para la próxima burbuja
+          finalRef.current = "";
+        }
+      }, 2500); 
     };
 
     recognition.onerror = (event) => {
@@ -51,17 +63,22 @@ export function useSpeechToText(onWordMatch) {
 
     recognition.onend = () => {
       setIsListening(false);
+      // Al apagar el micro, si quedó texto colgado, guardarlo
+      if (finalRef.current.trim() !== "") {
+        setMessages(prev => [...prev, { id: Date.now(), text: finalRef.current.trim() }]);
+        setFinalTranscript("");
+        finalRef.current = "";
+      }
     };
 
     recognitionRef.current = recognition;
-  }, [onWordMatch]);
+  }, []);
 
   const startListening = useCallback(() => {
     if (recognitionRef.current && !isListening) {
       try {
         recognitionRef.current.start();
         setIsListening(true);
-        console.log("🎙️ Micrófono activado...");
       } catch (err) {
         console.error("Error al iniciar micrófono:", err);
       }
@@ -72,14 +89,24 @@ export function useSpeechToText(onWordMatch) {
     if (recognitionRef.current && isListening) {
       recognitionRef.current.stop();
       setIsListening(false);
-      console.log("🎙️ Micrófono desactivado.");
     }
   }, [isListening]);
 
+  const clearTranscript = useCallback(() => {
+    setMessages([]);
+    setFinalTranscript("");
+    setInterimTranscript("");
+    finalRef.current = "";
+    if (timerRef.current) clearTimeout(timerRef.current);
+  }, []);
+
   return {
     isListening,
-    transcript,
+    messages,
+    finalTranscript,
+    interimTranscript,
     startListening,
-    stopListening
+    stopListening,
+    clearTranscript
   };
 }
