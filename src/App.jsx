@@ -12,9 +12,11 @@ import { SignTrainer } from "./components/SignTrainer";
 import { useDataCollector } from "./hooks/useDataCollector";
 import { useSignTranslation } from "./hooks/useSignTranslation";
 import { ListenerPanel } from "./components/ListenerPanel";
+import { SplashScreen } from "./components/SplashScreen";
 import "./App.css";
 
 function App() {
+  const [showSplash, setShowSplash] = useState(true);
   const [diagnostics, setDiagnostics] = useState({
     fps: 0,
     handsDetected: 0,
@@ -74,6 +76,7 @@ function App() {
 
   return (
     <div className="app-container" id="app-container">
+      {showSplash && <SplashScreen onComplete={() => setShowSplash(false)} />}
       <Header
         cameraStatus={diagnostics.modelStatus.hand === "loading" ? "loading" : "ready"}
         deviceName=""
