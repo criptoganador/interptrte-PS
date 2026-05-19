@@ -1390,32 +1390,3 @@
   border-radius: 4px;
 }
 
-/* ============================================
-   Google Drive Cloud Sync Status Animations
-   ============================================ */
-@keyframes pulseGlow {
-  0% { transform: scale(1); opacity: 0.8; }
-  50% { transform: scale(1.2); opacity: 1; box-shadow: 0 0 12px currentColor; }
-  100% { transform: scale(1); opacity: 0.8; }
-}
-
-.sync-indicator-dot.syncing {
-  animation: pulseGlow 1.5s infinite ease-in-out;
-  color: #fbbc05 !important;
-}
-
-.sync-indicator-dot.success {
-  animation: pulseGlow 2s infinite ease-in-out;
-  color: #34a853 !important;
-}
-
-.sync-indicator-dot.error {
-  animation: pulseGlow 1s infinite ease-in-out;
-  color: #ea4335 !important;
-}
-
-.sync-indicator-dot.connected {
-  animation: pulseGlow 3s infinite ease-in-out;
-  color: #4285f4 !important;
-}
-

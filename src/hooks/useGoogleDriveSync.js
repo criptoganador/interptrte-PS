@@ -1,8 +1,16 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 
+// Client ID por defecto creado por el desarrollador.
+// Puedes cambiarlo directamente aquí o definir VITE_GOOGLE_CLIENT_ID en tu archivo .env
+const DEFAULT_CLIENT_ID = "616641551044-pqp1qg9gpep0h9h9p0pepepepepepepe.apps.googleusercontent.com"; // Reemplaza esto con tu Client ID real de Google Cloud
+
 export function useGoogleDriveSync() {
   const [clientId, setClientId] = useState(() => {
-    return localStorage.getItem("lsv-gdrive-client-id") || "";
+    return (
+      import.meta.env.VITE_GOOGLE_CLIENT_ID ||
+      localStorage.getItem("lsv-gdrive-client-id") ||
+      DEFAULT_CLIENT_ID
+    );
   });
   const [accessToken, setAccessToken] = useState(() => {
     return sessionStorage.getItem("lsv-gdrive-token") || null;

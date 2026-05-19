@@ -1,12 +1,10 @@
 /**
  * useDataCollector — Hook para capturar y gestionar secuencias de landmarks
  * Permite grabar muestras, contar repeticiones y exportar el dataset final.
- * Ahora integrado con auto-guardado en Google Drive en tiempo real.
  */
 
 import { useState, useCallback, useRef, useEffect } from "react";
 import { get, set } from "idb-keyval";
-import { useGoogleDriveSync } from "./useGoogleDriveSync";
 
 export function useDataCollector() {
   const [dataset, setDataset] = useState([]);
@@ -15,8 +13,6 @@ export function useDataCollector() {
   const [currentLabel, setCurrentLabel] = useState("");
   const [samplesCount, setSamplesCount] = useState({});
   const [isLoaded, setIsLoaded] = useState(false); // Para evitar sobrescribir al montar
-
-  const gdrive = useGoogleDriveSync();
 
   // Carga inicial desde la base de datos local
   useEffect(() => {
@@ -45,46 +41,7 @@ export function useDataCollector() {
     }
   }, [dataset, isLoaded]);
 
-  // Sincronización automática con Google Drive en tiempo real (al grabar o quitar señas)
-  useEffect(() => {
-    if (isLoaded && gdrive.isConnected && dataset.length >= 0) {
-      // Disparar sincronización en la nube en segundo plano
-      gdrive.syncDataset(dataset);
-    }
-  }, [dataset, isLoaded, gdrive.isConnected, gdrive]);
-
-  // Cargar y fusionar dataset desde Google Drive al conectar la cuenta
-  useEffect(() => {
-    if (gdrive.isConnected) {
-      gdrive.downloadDataset().then((cloudDataset) => {
-        if (cloudDataset && cloudDataset.length > 0) {
-          const confirmMerge = window.confirm(
-            `☁️ Se encontró un respaldo en tu Google Drive con ${cloudDataset.length} muestras. ¿Deseas importarlo y fusionarlo con tus señas locales actuales?`
-          );
-          if (confirmMerge) {
-            setDataset((prev) => {
-              // Fusionar sin duplicados usando el timestamp único de cada muestra
-              const existingTimestamps = new Set(prev.map(s => s.timestamp));
-              const newSamples = cloudDataset.filter(s => !existingTimestamps.has(s.timestamp));
-              const merged = [...prev, ...newSamples];
-              
-              // Reconstruir contadores de muestras
-              const counts = {};
-              merged.forEach(s => {
-                counts[s.label] = (counts[s.label] || 0) + 1;
-              });
-              setSamplesCount(counts);
-              
-              console.log(`✅ Fusión completada. Total muestras: ${merged.length}`);
-              return merged;
-            });
-          }
-        }
-      }).catch(err => console.error("❌ Error descargando respaldo de Drive:", err));
-    }
-  }, [gdrive.isConnected, gdrive]);
-
-  // Referencias para evitar problemas de cierres (closures) en procesos asíncronos
+  // Referencias para evitar problemas de closures en procesos asíncronos
   const currentSequenceRef = useRef([]);
   const labelRef = useRef("");
   const recordingTimerRef = useRef(null);
@@ -229,7 +186,6 @@ export function useDataCollector() {
     clearDataset,
     undoLastSample,
     dataset,
-    datasetLength: dataset.length,
-    gdrive // Exponer toda la instancia de sincronización con Google Drive
+    datasetLength: dataset.length
   };
 }
