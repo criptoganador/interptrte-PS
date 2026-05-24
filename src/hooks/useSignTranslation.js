@@ -142,23 +142,36 @@ export function useSignTranslation() {
           }
         }
 
-        // Vigilante Estricto: Exigir 95% de seguridad y que el modelo no esté dudando
+        // Vigilante Estricto: Exigir 80% de seguridad y que el modelo no esté dudando
         // (la diferencia entre la mejor opción y la segunda debe ser amplia)
-        if (maxProb >= 0.95 && (maxProb - secondMaxProb) > 0.4) {
+        if (maxProb >= 0.80 && (maxProb - secondMaxProb) > 0.3) {
           const predictedLabel = labelsRef.current[maxIndex] || `Seña ${maxIndex}`;
           
           // === VALIDADOR DE DISTANCIA MATEMÁTICA (Filtro Anti-Desconocidos) ===
           let isValid = true;
           if (predictedLabel !== "REPOSO" && centroidsRef.current[predictedLabel]) {
-            const centroid = centroidsRef.current[predictedLabel];
-            const distance = calculateDistance(features, centroid);
+            const labelCentroids = centroidsRef.current[predictedLabel];
+            let minDistance = Infinity;
+            
+            if (Array.isArray(labelCentroids) && labelCentroids.length > 0) {
+              // Comparamos contra todos los moldes grabados (ej: molde mano izquierda, molde mano derecha)
+              for (const centroid of labelCentroids) {
+                const distance = calculateDistance(features, centroid);
+                if (distance < minDistance) {
+                  minDistance = distance;
+                }
+              }
+            } else if (labelCentroids && !Array.isArray(labelCentroids)) {
+              // Retrocompatibilidad con modelos viejos
+              minDistance = calculateDistance(features, labelCentroids);
+            }
             
             // Log para calibrar: Puedes ver este valor en la consola de Chrome (F12)
-            // console.log(`Seña: ${predictedLabel} | Confianza: ${maxProb.toFixed(2)} | Distancia: ${distance.toFixed(2)}`);
+            // console.log(`Seña: ${predictedLabel} | Confianza: ${maxProb.toFixed(2)} | Distancia: ${minDistance.toFixed(2)}`);
             
             // Umbral calibrado de distancia geométrica. 
             // 3.5 es más permisivo para variaciones naturales de la mano.
-            if (distance > 3.5) {
+            if (minDistance > 3.5) {
               isValid = false;
             }
           }

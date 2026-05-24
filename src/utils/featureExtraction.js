@@ -39,7 +39,8 @@ export function extractFeatures(frame) {
       p.z - origin.z
     ]);
 
-    if (handedness === "Left") {
+    const isLeft = handedness.toLowerCase() === "left";
+    if (isLeft) {
       leftHand = normalizedHand;
     } else {
       rightHand = normalizedHand;

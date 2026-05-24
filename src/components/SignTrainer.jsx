@@ -124,18 +124,32 @@ export function SignTrainer({ dataset, onModelTrained }) {
     model.add(tf.layers.dense({ units: outputSize, activation: 'softmax' }));
     
     model.compile({ 
-      optimizer: tf.train.adam(0.01), 
+      optimizer: tf.train.adam(0.005), 
       loss: 'categoricalCrossentropy', 
       metrics: ['accuracy'] 
     });
 
-    await model.fit(xs, ys, { 
-      epochs: 30, 
-      validationSplit: 0.1, 
-      callbacks: { 
-        onEpochEnd: (epoch) => setProgress((epoch + 1) / 30) 
-      } 
-    });
+    // === HACK: Evitar que TF.js pause el entrenamiento cuando la pestaña está en segundo plano ===
+    const originalRAF = window.requestAnimationFrame;
+    window.requestAnimationFrame = function(callback) {
+      if (document.hidden) {
+        return setTimeout(() => callback(performance.now()), 100);
+      }
+      return originalRAF(callback);
+    };
+
+    try {
+      await model.fit(xs, ys, { 
+        epochs: 50, 
+        validationSplit: 0.1, 
+        callbacks: { 
+          onEpochEnd: (epoch) => setProgress((epoch + 1) / 50) 
+        } 
+      });
+    } finally {
+      // Restaurar siempre requestAnimationFrame
+      window.requestAnimationFrame = originalRAF;
+    }
 
     addLog("💾 Guardando modelo en el navegador...");
     
@@ -151,28 +165,32 @@ export function SignTrainer({ dataset, onModelTrained }) {
       const samples = dataset.filter(item => item.label === label);
       if (samples.length === 0) return;
       
-      const allFeatures = [];
+      centroids[label] = [];
+      
+      // Creamos un centroide (molde) por cada MUESTRA grabada. 
+      // Esto permite que la misma seña se pueda hacer con la mano derecha o izquierda sin que se promedien y se rompan.
       samples.forEach(sample => {
+        const sampleFeatures = [];
         sample.sequence.forEach(frame => {
           const features = extractFeatures(frame);
           if (features) {
-            allFeatures.push(features);
+            sampleFeatures.push(features);
           }
         });
-      });
-      
-      if (allFeatures.length > 0) {
-        const centroid = new Array(126).fill(0);
-        allFeatures.forEach(features => {
+        
+        if (sampleFeatures.length > 0) {
+          const centroid = new Array(126).fill(0);
+          sampleFeatures.forEach(features => {
+            for (let i = 0; i < 126; i++) {
+              centroid[i] += features[i];
+            }
+          });
           for (let i = 0; i < 126; i++) {
-            centroid[i] += features[i];
+            centroid[i] /= sampleFeatures.length;
           }
-        });
-        for (let i = 0; i < 126; i++) {
-          centroid[i] /= allFeatures.length;
+          centroids[label].push(centroid);
         }
-        centroids[label] = centroid;
-      }
+      });
     });
     localStorage.setItem("lsv-centroids", JSON.stringify(centroids));
     addLog("📏 Moldes matemáticos guardados.");
