@@ -40,19 +40,21 @@ export function useCamera() {
     setError(null);
 
     try {
-      let cameraDeviceId = selectedDeviceId;
-      let micDeviceId = selectedMicId;
+      const { videoDevices, audioDevices } = await enumerateMediaDevices();
 
-      // Buscar dispositivos disponibles si no se han cargado
-      if (cameras.length === 0 || microphones.length === 0) {
-        const { videoDevices, audioDevices } = await enumerateMediaDevices();
+      let cameraDeviceId = selectedDeviceId && videoDevices.some((d) => d.deviceId === selectedDeviceId)
+        ? selectedDeviceId
+        : videoDevices[0]?.deviceId || "";
 
-        if (!cameraDeviceId && videoDevices.length > 0) {
-          cameraDeviceId = videoDevices[0].deviceId;
-        }
-        if (!micDeviceId && audioDevices.length > 0) {
-          micDeviceId = audioDevices[0].deviceId;
-        }
+      let micDeviceId = selectedMicId && audioDevices.some((d) => d.deviceId === selectedMicId)
+        ? selectedMicId
+        : audioDevices[0]?.deviceId || "";
+
+      if (!selectedDeviceId && cameraDeviceId) {
+        setSelectedDeviceId(cameraDeviceId);
+      }
+      if (!selectedMicId && micDeviceId) {
+        setSelectedMicId(micDeviceId);
       }
 
       const audioConstraints = micDeviceId ? { deviceId: { exact: micDeviceId } } : null;
@@ -100,6 +102,14 @@ export function useCamera() {
         setStatus("denied");
         setError("Permiso de cámara denegado. Por favor, permite el acceso a la cámara.");
       } else if (err.name === "NotFoundError" || err.name === "DevicesNotFoundError") {
+        const { videoDevices } = await enumerateMediaDevices();
+        if (videoDevices.length > 0) {
+          setSelectedDeviceId(videoDevices[0].deviceId);
+          setStatus("loading");
+          await startCamera();
+          return;
+        }
+
         setStatus("error");
         setError("No se encontró ninguna cámara. Verifica que la PS3 Eye esté conectada.");
       } else {
