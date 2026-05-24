@@ -84,7 +84,7 @@ export function useDataCollector() {
 
     labelRef.current = label; // Guardar en ref para acceso asíncrono
     setCurrentLabel(label);   // Guardar en estado para la UI
-    setCountdown(3);
+    setCountdown(6);
 
     // Cuenta regresiva
     const cdInterval = setInterval(() => {
