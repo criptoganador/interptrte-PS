@@ -7,7 +7,7 @@ import { useState } from 'react';
 import * as tf from '@tensorflow/tfjs';
 import { extractFeatures } from '../utils/featureExtraction';
 
-export function SignTrainer({ dataset, onModelTrained }) {
+export function SignTrainer({ dataset, onModelTrained, syncCommunityFromCloud }) {
   const [trainingStatus, setTrainingStatus] = useState('idle'); // idle, training, finished
   const [logs, setLogs] = useState([]);
   const [progress, setProgress] = useState(0);
@@ -92,6 +92,12 @@ export function SignTrainer({ dataset, onModelTrained }) {
     if (!dataset || dataset.length === 0) {
       addLog("⚠️ No hay datos para entrenar.");
       return;
+    }
+
+    if (syncCommunityFromCloud) {
+      addLog("📡 Descargando señas comunitarias antes de entrenar...");
+      await syncCommunityFromCloud();
+      addLog("✅ Señas comunitarias actualizadas. Iniciando entrenamiento...");
     }
 
     const processed = processData(dataset);
@@ -209,6 +215,9 @@ export function SignTrainer({ dataset, onModelTrained }) {
   return (
     <section className="diag-section trainer-lab">
       <h3 className="section-title">Laboratorio de IA</h3>
+      <p style={{ fontSize: '0.9rem', lineHeight: '1.4', marginBottom: '10px', marginTop: '0' }}>
+        Al entrenar, se descargarán las señas comunitarias nuevas y se entrenará tu IA automáticamente.
+      </p>
       
       {(!dataset || dataset.length === 0) ? (
         <div className="dataset-stats" style={{textAlign: 'center', padding: '20px'}}>

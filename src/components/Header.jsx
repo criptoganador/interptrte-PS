@@ -10,6 +10,8 @@ export function Header({
   handDetection,
   faceDetection,
   poseDetection,
+  onLogout,
+  user
 }) {
   const [showControls, setShowControls] = useState(false);
 
@@ -51,7 +53,24 @@ export function Header({
         </div>
       </div>
 
-      <div className="header-right">
+      <div className="header-right" style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+        {user && (
+          <div style={{ fontSize: '12px', color: 'var(--color-primary)' }}>
+            {user.email}
+          </div>
+        )}
+        
+        {onLogout && (
+          <button 
+            className="controls-toggle" 
+            onClick={onLogout}
+            title="Cerrar Sesión"
+            style={{ borderColor: 'var(--color-danger)', color: 'var(--color-danger)' }}
+          >
+            <span className="toggle-label">Salir</span>
+          </button>
+        )}
+
         <button
           className="controls-toggle"
           id="btn-toggle-controls"

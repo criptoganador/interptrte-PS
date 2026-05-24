@@ -91,8 +91,8 @@ export function TrainerPanel({ collector }) {
           >
             <div className="recorder-message-header">
               {recorderMessage.type === "duplicate" && "🔁 Grabador Inteligente"}
-              {recorderMessage.type === "success" && "✅ Grabación Exitosa"}
-              {recorderMessage.type === "error" && "⚠️ Error de Grabación"}
+              {recorderMessage.type === "success" && "✅ Sistema"}
+              {recorderMessage.type === "error" && "⚠️ Error"}
             </div>
             <div className="recorder-message-body">
               {recorderMessage.text}
@@ -123,6 +123,13 @@ export function TrainerPanel({ collector }) {
             <p className="metric-empty">No hay muestras grabadas aún.</p>
           )}
         </div>
+      </section>
+
+      <section className="diag-section">
+        <h3 className="section-title">Resumido</h3>
+        <p style={{ fontSize: '0.9rem', lineHeight: '1.5', margin: 0 }}>
+          Las muestras nuevas se guardan automáticamente. Si hay señas comunitarias nuevas, verás un aviso para entrenar la IA.
+        </p>
       </section>
 
       <section className="trainer-actions">

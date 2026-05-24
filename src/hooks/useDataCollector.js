@@ -127,6 +127,125 @@ export function useDataCollector() {
     return { isDuplicate: false, matchIndex: -1, distance: Infinity };
   }, [computeCentroid]);
 
+  const normalizeCentroids = useCallback((centroids) => {
+    if (!centroids || typeof centroids !== 'object') return {};
+    const normalized = {};
+    Object.entries(centroids).forEach(([label, value]) => {
+      if (Array.isArray(value)) {
+        normalized[label] = value;
+      } else if (value && typeof value === 'object') {
+        normalized[label] = [value];
+      }
+    });
+    return normalized;
+  }, []);
+
+  const mergeCentroids = useCallback((baseCentroids, incomingCentroids) => {
+    const merged = { ...baseCentroids };
+    Object.entries(incomingCentroids).forEach(([label, centroids]) => {
+      if (!Array.isArray(centroids)) return;
+      if (!Array.isArray(merged[label])) {
+        merged[label] = [];
+      }
+      merged[label] = [...merged[label], ...centroids];
+    });
+    return merged;
+  }, []);
+
+  const mergeCommunityData = useCallback(async (data) => {
+    if (!data || !Array.isArray(data.dataset_json)) {
+      return { added: 0, labelsAdded: 0 };
+    }
+
+    const existingLabels = new Set(JSON.parse(localStorage.getItem('lsv-labels') || '[]'));
+    const existingCentroids = normalizeCentroids(JSON.parse(localStorage.getItem('lsv-centroids') || '{}'));
+
+    const newSamples = [];
+    const newCounts = { ...samplesCount };
+    let labelsAdded = 0;
+
+    data.dataset_json.forEach((sample) => {
+      if (!sample || !sample.label || !Array.isArray(sample.sequence)) return;
+
+      const duplicateCheck = checkForDuplicate(sample.sequence, sample.label);
+      if (duplicateCheck.isDuplicate) return;
+
+      newSamples.push(sample);
+      newCounts[sample.label] = (newCounts[sample.label] || 0) + 1;
+      if (!existingLabels.has(sample.label)) {
+        existingLabels.add(sample.label);
+        labelsAdded += 1;
+      }
+    });
+
+    if (newSamples.length > 0) {
+      setDataset((prev) => [...prev, ...newSamples]);
+      setSamplesCount(newCounts);
+      await set('lsv-dataset', [...datasetRef.current, ...newSamples]);
+    }
+
+    const mergedLabels = [...existingLabels];
+    localStorage.setItem('lsv-labels', JSON.stringify(mergedLabels));
+
+    const remoteCentroids = normalizeCentroids(data.centroids_json || {});
+    const mergedCentroids = mergeCentroids(existingCentroids, remoteCentroids);
+    localStorage.setItem('lsv-centroids', JSON.stringify(mergedCentroids));
+
+    return { added: newSamples.length, labelsAdded };
+  }, [checkForDuplicate, mergeCentroids, normalizeCentroids, samplesCount]);
+
+  const [communitySyncStatus, setCommunitySyncStatus] = useState('idle');
+
+  const syncCommunityFromCloud = useCallback(async () => {
+    const token = localStorage.getItem('lsv-token');
+    if (!token) return;
+
+    setCommunitySyncStatus('syncing');
+    try {
+      const response = await fetch('http://localhost:3001/api/sync/community', {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+
+      if (!response.ok) {
+        if (response.status === 404) {
+          console.log('No hay datos comunitarios disponibles.');
+          setCommunitySyncStatus('idle');
+          return;
+        }
+        throw new Error('Error al descargar datos comunitarios');
+      }
+
+      const data = await response.json();
+      const { added, labelsAdded } = await mergeCommunityData(data);
+      console.log(`🔄 Descargadas ${added} nuevas muestras comunitarias. Etiquetas nuevas: ${labelsAdded}.`);
+
+      if (added > 0) {
+        setRecorderMessage({
+          type: 'success',
+          text: `✅ Se descargaron ${added} muestras nuevas de la comunidad. Entrena la IA para que aprenda estas señas.`
+        });
+      } else {
+        setRecorderMessage({
+          type: 'success',
+          text: 'ℹ️ No hay muestras comunitarias nuevas para agregar. Tu dataset ya está actualizado.'
+        });
+      }
+
+      setCommunitySyncStatus('success');
+      setTimeout(() => setCommunitySyncStatus('idle'), 2500);
+      return { added, labelsAdded };
+    } catch (error) {
+      console.error('Error sincronizando comunidad:', error);
+      setRecorderMessage({ type: 'error', text: '❌ No se pudo descargar datos comunitarios. Revisa tu conexión.' });
+      setCommunitySyncStatus('error');
+      setTimeout(() => setCommunitySyncStatus('idle'), 2500);
+      return { added: 0, labelsAdded: 0 };
+    }
+  }, [mergeCommunityData]);
+
   /**
    * Detiene la captura y verifica duplicados antes de guardar
    */
@@ -167,7 +286,8 @@ export function useDataCollector() {
         sequence: sequence
       };
 
-      setDataset((prev) => [...prev, newSample]);
+      const newDataset = [...datasetRef.current, newSample];
+      setDataset(newDataset);
       
       // Actualizar contador de muestras por seña
       setSamplesCount((prev) => ({
@@ -181,6 +301,12 @@ export function useDataCollector() {
       });
       
       console.log(`✅ Muestra guardada para: ${labelToSave} (${sequence.length} frames)`);
+
+      // Compartir la muestra nueva automáticamente si el usuario está autenticado.
+      void uploadToCloud({
+        datasetToUpload: newDataset,
+        silent: true
+      });
     }
   }, [checkForDuplicate]);
 
@@ -298,6 +424,133 @@ export function useDataCollector() {
     setRecorderMessage(null);
   }, []);
 
+  /**
+   * Sincronizar datos hacia la nube (respaldo)
+   */
+  const [syncStatus, setSyncStatus] = useState('idle');
+
+  const uploadToCloud = useCallback(async ({
+    datasetToUpload,
+    labels_json,
+    centroids_json,
+    silent = false
+  }) => {
+    const token = localStorage.getItem('lsv-token');
+    if (!token) {
+      if (!silent) {
+        alert("Inicia sesión primero para guardar en la nube.");
+      }
+      return { success: false };
+    }
+
+    const payload = {
+      dataset_json: datasetToUpload || datasetRef.current,
+      labels_json: labels_json || JSON.parse(localStorage.getItem('lsv-labels') || '[]'),
+      centroids_json: centroids_json || JSON.parse(localStorage.getItem('lsv-centroids') || '{}')
+    };
+
+    if (!silent) {
+      setSyncStatus('syncing');
+    }
+
+    try {
+      const response = await fetch('http://localhost:3001/api/sync/upload', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) throw new Error('Error al sincronizar');
+
+      if (!silent) {
+        setSyncStatus('success');
+        setRecorderMessage({ type: 'success', text: '✅ Datos respaldados en la nube exitosamente.' });
+        setTimeout(() => setSyncStatus('idle'), 3000);
+      }
+
+      return { success: true };
+    } catch (error) {
+      console.error(error);
+      if (!silent) {
+        setSyncStatus('error');
+        setRecorderMessage({ type: 'error', text: '❌ Error al subir a la nube.' });
+        setTimeout(() => setSyncStatus('idle'), 3000);
+      }
+      return { success: false };
+    }
+  }, []);
+
+  const syncToCloud = useCallback(async (options = { silent: false }) => {
+    return uploadToCloud({ silent: options.silent });
+  }, [uploadToCloud]);
+
+  /**
+   * Descargar datos desde la nube
+   */
+  const syncFromCloud = useCallback(async () => {
+    const token = localStorage.getItem('lsv-token');
+    if (!token) {
+      alert("Inicia sesión primero para descargar tus datos.");
+      return;
+    }
+
+    setSyncStatus('syncing');
+    try {
+      const response = await fetch('http://localhost:3001/api/sync/download', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (!response.ok) {
+        if (response.status === 404) {
+          setRecorderMessage({ type: 'error', text: '⚠️ No tienes datos guardados en la nube todavía.' });
+          setSyncStatus('idle');
+          return;
+        }
+        throw new Error('Error al descargar');
+      }
+
+      const data = await response.json();
+      
+      // Restaurar Dataset
+      if (data.dataset_json && Array.isArray(data.dataset_json)) {
+        setDataset(data.dataset_json);
+        // Reconstruir contadores
+        const counts = {};
+        data.dataset_json.forEach(s => {
+          counts[s.label] = (counts[s.label] || 0) + 1;
+        });
+        setSamplesCount(counts);
+        await set("lsv-dataset", data.dataset_json);
+      }
+
+      // Restaurar parámetros del modelo (Etiquetas y Centroides)
+      if (data.labels_json) {
+        localStorage.setItem("lsv-labels", JSON.stringify(data.labels_json));
+      }
+      if (data.centroids_json) {
+        localStorage.setItem("lsv-centroids", JSON.stringify(data.centroids_json));
+      }
+
+      setSyncStatus('success');
+      setRecorderMessage({ 
+        type: 'success', 
+        text: '✅ Datos descargados de la nube. Por favor haz clic en "ENTRENAR IA" para reactivar el modelo.' 
+      });
+      setTimeout(() => setSyncStatus('idle'), 5000);
+    } catch (error) {
+      console.error(error);
+      setSyncStatus('error');
+      setRecorderMessage({ type: 'error', text: '❌ Error al descargar desde la nube.' });
+      setTimeout(() => setSyncStatus('idle'), 3000);
+    }
+  }, []);
+
   return {
     isRecording,
     countdown,
@@ -312,6 +565,12 @@ export function useDataCollector() {
     datasetLength: dataset.length,
     // === NUEVOS: Grabador Inteligente ===
     recorderMessage,
-    clearRecorderMessage
+    clearRecorderMessage,
+    // === NUEVOS: Nube ===
+    syncToCloud,
+    syncFromCloud,
+    syncCommunityFromCloud,
+    syncStatus,
+    communitySyncStatus
   };
 }

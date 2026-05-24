@@ -12,9 +12,28 @@ import { SignTrainer } from "./components/SignTrainer";
 import { useDataCollector } from "./hooks/useDataCollector";
 import { useSignTranslation } from "./hooks/useSignTranslation";
 import { ListenerPanel } from "./components/ListenerPanel";
+import { Auth } from "./components/Auth";
 import "./App.css";
 
 function App() {
+  const [user, setUser] = useState(() => {
+    const saved = localStorage.getItem('lsv-user');
+    return saved ? JSON.parse(saved) : null;
+  });
+  const [token, setToken] = useState(() => localStorage.getItem('lsv-token') || null);
+
+  const handleLogin = (userData, userToken) => {
+    setUser(userData);
+    setToken(userToken);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('lsv-user');
+    localStorage.removeItem('lsv-token');
+    setUser(null);
+    setToken(null);
+  };
+
   const [diagnostics, setDiagnostics] = useState({
     fps: 0,
     handsDetected: 0,
@@ -31,7 +50,16 @@ function App() {
   });
 
   const collector = useDataCollector();
+  const { syncCommunityFromCloud } = collector;
   const translation = useSignTranslation();
+
+  useEffect(() => {
+    if (user && token && syncCommunityFromCloud) {
+      syncCommunityFromCloud().catch((err) => {
+        console.error('Error en la descarga comunitaria automática:', err);
+      });
+    }
+  }, [user, token, syncCommunityFromCloud]);
 
   // Enlazar el borrado del dataset con la remoción física e instantánea del modelo entrenado
   const collectorWithUnload = useMemo(() => ({
@@ -74,6 +102,10 @@ function App() {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
+  if (!user || !token) {
+    return <Auth onLogin={handleLogin} />;
+  }
+
   return (
     <div className="app-container" id="app-container">
       <Header
@@ -82,6 +114,8 @@ function App() {
         handDetection={detectors.handDetection}
         faceDetection={detectors.faceDetection}
         poseDetection={detectors.poseDetection}
+        onLogout={handleLogout}
+        user={user}
       />
 
       <main className={`app-main ${isTheatreMode ? "theatre-active" : ""}`} id="app-main">
@@ -122,6 +156,7 @@ function App() {
               <SignTrainer 
                 dataset={collectorWithUnload._dataset || collectorWithUnload.dataset} 
                 onModelTrained={translation.loadModel}
+                syncCommunityFromCloud={collectorWithUnload.syncCommunityFromCloud}
               />
               <DiagnosticsPanel diagnostics={diagnostics} />
               
@@ -168,6 +203,7 @@ function App() {
             <SignTrainer 
               dataset={collectorWithUnload._dataset || collectorWithUnload.dataset} 
               onModelTrained={translation.loadModel}
+              syncCommunityFromCloud={collectorWithUnload.syncCommunityFromCloud}
             />
             
             {/* Selector de Voz */}
