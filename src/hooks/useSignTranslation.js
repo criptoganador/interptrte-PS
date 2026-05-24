@@ -228,7 +228,7 @@ export function useSignTranslation() {
               const requiredConsensus = Math.min(4, predictionHistoryRef.current.length);
               if (maxCount >= requiredConsensus) {
                 const labelUpper = dominantLabel.toUpperCase();
-                if (labelUpper === "REPOSO" || labelUpper === "NADA" || labelUpper === "..." || labelUpper === "RUIDO") {
+                if (labelUpper === "REPOSO" || labelUpper === "NADA" || labelUpper === "..." || labelUpper === "RUIDO" || labelUpper === "__UNSURE__") {
                   setCurrentTranslation(""); // Ignorar la basura silenciosamente
                 } else {
                   setCurrentTranslation(dominantLabel);
