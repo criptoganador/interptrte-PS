@@ -12,6 +12,19 @@ export function useSpeechToText(preferredMicDeviceId) {
   const finalRef = useRef("");
 
   useEffect(() => {
+    const requestInitialMicrophone = async () => {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream.getTracks().forEach((track) => track.stop());
+      } catch (err) {
+        console.warn('No se pudo solicitar permiso de micrófono al cargar:', err.name);
+      }
+    };
+
+    requestInitialMicrophone();
+
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
       console.warn("⚠️ Este navegador no soporta el reconocimiento de voz.");

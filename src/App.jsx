@@ -61,6 +61,23 @@ function App() {
     }
   }, [user, token, syncCommunityFromCloud]);
 
+  useEffect(() => {
+    const requestInitialMicrophone = async () => {
+      if (!user || !token) return;
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream.getTracks().forEach((track) => track.stop());
+        console.log('Solicitud inicial de permiso de micrófono completada.');
+      } catch (err) {
+        console.warn('No se pudo solicitar permiso de micrófono al iniciar la app:', err?.name || err);
+      }
+    };
+
+    requestInitialMicrophone();
+  }, [user, token]);
+
   // Enlazar el borrado del dataset con la remoción física e instantánea del modelo entrenado
   const collectorWithUnload = useMemo(() => ({
     ...collector,
