@@ -138,6 +138,32 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
+// Reset password
+app.post('/api/auth/reset-password', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email y nueva contraseña son requeridos.' });
+    }
+
+    const userResult = await pool.query('SELECT id FROM lsv_users WHERE email = $1', [email]);
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ error: 'No existe una cuenta con ese email.' });
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    const passwordHash = await bcrypt.hash(password, salt);
+
+    await pool.query('UPDATE lsv_users SET password_hash = $1 WHERE email = $2', [passwordHash, email]);
+
+    res.json({ message: 'Contraseña actualizada correctamente. Ahora puedes iniciar sesión con la nueva contraseña.' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Error interno: ' + error.message });
+  }
+});
+
 // --- SYNC ENDPOINTS ---
 
 // Upload Data (Save dataset and model params to cloud)
@@ -195,7 +221,11 @@ app.get('/api/sync/community', authenticateToken, async (req, res) => {
     const communityData = await pool.query('SELECT dataset_json, labels_json, centroids_json FROM user_data WHERE dataset_json IS NOT NULL');
 
     if (communityData.rows.length === 0) {
-      return res.status(404).json({ message: 'No hay datos comunitarios disponibles.' });
+      return res.status(200).json({
+        dataset_json: [],
+        labels_json: [],
+        centroids_json: {}
+      });
     }
 
     const mergedDataset = [];

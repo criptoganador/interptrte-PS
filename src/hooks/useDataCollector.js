@@ -211,9 +211,9 @@ export function useDataCollector() {
 
       if (!response.ok) {
         if (response.status === 404) {
-          console.log('No hay datos comunitarios disponibles.');
+          setRecorderMessage({ type: 'info', text: 'ℹ️ No hay datos comunitarios disponibles por ahora.' });
           setCommunitySyncStatus('idle');
-          return;
+          return { added: 0, labelsAdded: 0 };
         }
         throw new Error('Error al descargar datos comunitarios');
       }

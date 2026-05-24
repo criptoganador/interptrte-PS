@@ -64,8 +64,11 @@ export function CameraView({
     error: cameraError,
     deviceName: cameraDeviceName,
     cameras: availableCameras,
+    microphones: availableMicrophones,
     selectedDeviceId,
+    selectedMicId,
     switchCamera,
+    switchMicrophone,
     startCamera,
     stopCamera,
   } = useCamera();
@@ -298,9 +301,21 @@ export function CameraView({
 
   return (
     <div className="camera-view" id="camera-view">
-      {/* Menú de selección de Cámara (solo visible si hay más de 1) */}
-      {availableCameras && availableCameras.length > 1 && (
-        <div style={{ position: 'absolute', top: '10px', left: '10px', zIndex: 50 }}>
+      {/* Menú de selección de Cámara y Micrófono */}
+      <div style={{ position: 'absolute', top: '10px', left: '10px', zIndex: 50, display: 'flex', gap: '8px', alignItems: 'center' }}>
+        <div style={{
+          color: 'white',
+          background: 'rgba(0,0,0,0.6)',
+          border: '1px solid rgba(255,255,255,0.3)',
+          padding: '4px 8px',
+          borderRadius: '4px',
+          fontSize: '0.8rem',
+          whiteSpace: 'nowrap'
+        }}>
+          🎤 Micrófono y voz
+        </div>
+
+        {availableCameras && availableCameras.length > 1 && (
           <select 
             value={selectedDeviceId} 
             onChange={(e) => switchCamera(e.target.value)}
@@ -324,8 +339,75 @@ export function CameraView({
               </option>
             ))}
           </select>
-        </div>
-      )}
+        )}
+
+        {availableMicrophones && availableMicrophones.length > 0 && (
+          <select
+            value={selectedMicId}
+            onChange={(e) => switchMicrophone(e.target.value)}
+            style={{
+              background: 'rgba(0,0,0,0.6)',
+              color: 'white',
+              border: '1px solid rgba(255,255,255,0.3)',
+              padding: '4px 8px',
+              borderRadius: '4px',
+              fontSize: '0.8rem',
+              outline: 'none',
+              cursor: 'pointer',
+              maxWidth: '220px',
+              textOverflow: 'ellipsis'
+            }}
+            title="Seleccionar Micrófono"
+          >
+            {availableMicrophones.map((mic, idx) => (
+              <option key={mic.deviceId} value={mic.deviceId}>
+                🎤 {mic.label || `Micrófono ${idx + 1}`}
+              </option>
+            ))}
+          </select>
+        )}
+
+        {translation.voices && translation.voices.length > 0 && (
+          <select
+            value={translation.selectedVoiceURI}
+            onChange={(e) => translation.changeVoice(e.target.value)}
+            style={{
+              background: 'rgba(0,0,0,0.6)',
+              color: 'white',
+              border: '1px solid rgba(255,255,255,0.3)',
+              padding: '4px 8px',
+              borderRadius: '4px',
+              fontSize: '0.8rem',
+              outline: 'none',
+              cursor: 'pointer',
+              maxWidth: '220px',
+              textOverflow: 'ellipsis'
+            }}
+            title="Seleccionar voz para la lectura"
+          >
+            {translation.voices.filter(v => v.lang.startsWith('es')).map((v, idx) => (
+              <option key={v.voiceURI} value={v.voiceURI}>
+                {v.name.includes('Sabina') || v.name.includes('Helena') || v.name.includes('Laura') ? '👩 Voz Mujer' :
+                 v.name.includes('Pablo') || v.name.includes('Tomas') ? '👨 Voz Hombre' :
+                 `🗣️ ${v.name}`}
+              </option>
+            ))}
+          </select>
+        )}
+
+        {availableMicrophones && availableMicrophones.length === 0 && (
+          <div style={{
+            color: 'white',
+            background: 'rgba(0,0,0,0.5)',
+            border: '1px solid rgba(255,255,255,0.3)',
+            padding: '4px 8px',
+            borderRadius: '4px',
+            fontSize: '0.8rem'
+          }}>
+            🎤 Sin micrófono
+          </div>
+        )}
+      </div>
 
       {/* Estado de carga */}
       {(cameraStatus === "idle" || cameraStatus === "loading") && (
@@ -443,23 +525,6 @@ export function CameraView({
         </div>
 
         <div className="youtube-controls-right">
-          {translation.voices && translation.voices.length > 0 && (
-            <select 
-              value={translation.selectedVoiceURI} 
-              onChange={(e) => translation.changeVoice(e.target.value)}
-              className="youtube-voice-select"
-              title="Seleccionar Voz"
-            >
-              {translation.voices.map(v => (
-                <option key={v.voiceURI} value={v.voiceURI}>
-                  {v.name.includes("Sabina") || v.name.includes("Helena") || v.name.includes("Laura") ? "👩 Voz Mujer" : 
-                   v.name.includes("Pablo") || v.name.includes("Tomas") ? "👨 Voz Hombre" : 
-                   `🗣️ ${v.name.split(' ')[1] || 'Voz'}`}
-                </option>
-              ))}
-            </select>
-          )}
-
           <span className="youtube-badge cc">CC</span>
           <span className="youtube-badge hd">HD</span>
 

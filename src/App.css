@@ -1659,3 +1659,27 @@
   border: 1px solid rgba(16, 185, 129, 0.3);
 }
 
+.password-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.password-field input {
+  flex: 1;
+}
+
+.show-password-btn {
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.15);
+  color: var(--text-primary);
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.show-password-btn:hover {
+  background: rgba(255,255,255,0.05);
+}
+

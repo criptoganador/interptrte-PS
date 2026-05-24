@@ -159,38 +159,6 @@ function App() {
                 syncCommunityFromCloud={collectorWithUnload.syncCommunityFromCloud}
               />
               <DiagnosticsPanel diagnostics={diagnostics} />
-              
-              {/* Selector de Voz */}
-              {translation.voices && translation.voices.length > 0 && (
-                <section className="diag-section voice-selector" style={{ marginTop: '10px' }}>
-                  <h3 className="section-title">Configuración de Voz</h3>
-                  <div className="input-group">
-                    <select 
-                      value={translation.selectedVoiceURI} 
-                      onChange={(e) => translation.changeVoice(e.target.value)}
-                      style={{ 
-                        width: '100%',
-                        background: 'rgba(255,255,255,0.05)', 
-                        color: 'white', 
-                        border: '1px solid rgba(255,255,255,0.1)', 
-                        padding: '8px', 
-                        borderRadius: '4px',
-                        fontSize: '0.9rem',
-                        outline: 'none',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      {translation.voices.filter(v => v.lang.startsWith("es")).map(v => (
-                        <option key={v.voiceURI} value={v.voiceURI} style={{ background: '#222', color: 'white' }}>
-                          {v.name.includes("Sabina") || v.name.includes("Helena") || v.name.includes("Laura") ? "👩 Voz Mujer" : 
-                           v.name.includes("Pablo") || v.name.includes("Tomas") ? "👨 Voz Hombre" : 
-                           `🗣️ ${v.name}`}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </section>
-              )}
             </div>
           )}
         </div>
@@ -205,38 +173,6 @@ function App() {
               onModelTrained={translation.loadModel}
               syncCommunityFromCloud={collectorWithUnload.syncCommunityFromCloud}
             />
-            
-            {/* Selector de Voz */}
-            {translation.voices && translation.voices.length > 0 && (
-              <section className="diag-section voice-selector" style={{ marginTop: '10px' }}>
-                <h3 className="section-title">Configuración de Voz</h3>
-                <div className="input-group">
-                  <select 
-                    value={translation.selectedVoiceURI} 
-                    onChange={(e) => translation.changeVoice(e.target.value)}
-                    style={{ 
-                      width: '100%',
-                      background: 'rgba(255,255,255,0.05)', 
-                      color: 'white', 
-                      border: '1px solid rgba(255,255,255,0.1)', 
-                      padding: '8px', 
-                      borderRadius: '4px',
-                      fontSize: '0.9rem',
-                      outline: 'none',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    {translation.voices.filter(v => v.lang.startsWith("es")).map(v => (
-                      <option key={v.voiceURI} value={v.voiceURI} style={{ background: '#222', color: 'white' }}>
-                        {v.name.includes("Sabina") || v.name.includes("Helena") || v.name.includes("Laura") ? "👩 Voz Mujer" : 
-                         v.name.includes("Pablo") || v.name.includes("Tomas") ? "👨 Voz Hombre" : 
-                         `🗣️ ${v.name}`}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </section>
-            )}
           </div>
         )}
       </main>

@@ -16,36 +16,66 @@ export function useCamera() {
   // Soporte para múltiples cámaras
   const [cameras, setCameras] = useState([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState("");
+  const [microphones, setMicrophones] = useState([]);
+  const [selectedMicId, setSelectedMicId] = useState("");
+
+  const enumerateMediaDevices = useCallback(async () => {
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const videoDevices = devices.filter(device => device.kind === 'videoinput');
+      const audioDevices = devices.filter(device => device.kind === 'audioinput');
+
+      setCameras(videoDevices);
+      setMicrophones(audioDevices);
+
+      return { videoDevices, audioDevices };
+    } catch (err) {
+      console.warn('Error enumerando dispositivos:', err);
+      return { videoDevices: [], audioDevices: [] };
+    }
+  }, []);
 
   const startCamera = useCallback(async () => {
     setStatus("loading");
     setError(null);
 
     try {
+      let cameraDeviceId = selectedDeviceId;
+      let micDeviceId = selectedMicId;
+
       // Buscar dispositivos disponibles si no se han cargado
-      if (cameras.length === 0) {
-        const devices = await navigator.mediaDevices.enumerateDevices();
-        const videoDevices = devices.filter(device => device.kind === 'videoinput');
-        setCameras(videoDevices);
-        
-        // Si no hay una seleccionada y hay cámaras, seleccionar la primera
-        if (!selectedDeviceId && videoDevices.length > 0) {
-          setSelectedDeviceId(videoDevices[0].deviceId);
+      if (cameras.length === 0 || microphones.length === 0) {
+        const { videoDevices, audioDevices } = await enumerateMediaDevices();
+
+        if (!cameraDeviceId && videoDevices.length > 0) {
+          cameraDeviceId = videoDevices[0].deviceId;
+        }
+        if (!micDeviceId && audioDevices.length > 0) {
+          micDeviceId = audioDevices[0].deviceId;
         }
       }
 
+      const audioConstraints = micDeviceId ? { deviceId: { exact: micDeviceId } } : false;
       const constraints = {
         video: {
           width: { ideal: CAMERA_CONFIG.width },
           height: { ideal: CAMERA_CONFIG.height },
           frameRate: { ideal: CAMERA_CONFIG.frameRate },
-          ...(selectedDeviceId ? { deviceId: { exact: selectedDeviceId } } : {})
+          ...(cameraDeviceId ? { deviceId: { exact: cameraDeviceId } } : {})
         },
-        audio: false,
+        audio: audioConstraints,
       };
 
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       streamRef.current = stream;
+
+      // Actualizar selección de dispositivos si se eligieron automáticamente
+      if (!selectedDeviceId && cameraDeviceId) {
+        setSelectedDeviceId(cameraDeviceId);
+      }
+      if (!selectedMicId && micDeviceId) {
+        setSelectedMicId(micDeviceId);
+      }
 
       // Obtener nombre del dispositivo
       const videoTrack = stream.getVideoTracks()[0];
@@ -72,25 +102,57 @@ export function useCamera() {
       }
       console.error("Camera error:", err);
     }
-  }, [selectedDeviceId, cameras.length]); // Añadir dependencias
+  }, [selectedDeviceId, selectedMicId, cameras.length, microphones.length]); // Añadir dependencias
 
   // Cambiar de cámara en tiempo real
-  const switchCamera = useCallback(async (deviceId) => {
+  const switchCamera = useCallback((deviceId) => {
     if (deviceId === selectedDeviceId) return;
-    
     setSelectedDeviceId(deviceId);
-    
-    // Si la cámara ya está encendida, reiniciarla con el nuevo dispositivo
-    if (status === "ready" || status === "loading") {
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach((track) => track.stop());
+  }, [selectedDeviceId]);
+
+  const switchMicrophone = useCallback((deviceId) => {
+    if (deviceId === selectedMicId) return;
+    setSelectedMicId(deviceId);
+  }, [selectedMicId]);
+
+  const hasStartedRef = useRef(false);
+
+  useEffect(() => {
+    const handleDeviceChange = async () => {
+      const { audioDevices, videoDevices } = await enumerateMediaDevices();
+
+      if (!selectedMicId && audioDevices.length > 0) {
+        setSelectedMicId(audioDevices[0].deviceId);
+        if (status === 'ready' || status === 'idle') {
+          startCamera();
+        }
       }
-      // Pequeña pausa para permitir que el hardware libere la cámara vieja
-      setTimeout(() => {
-        startCamera();
-      }, 100);
+
+      if (selectedMicId && !audioDevices.some((device) => device.deviceId === selectedMicId) && audioDevices.length > 0) {
+        setSelectedMicId(audioDevices[0].deviceId);
+      }
+
+      if (!selectedDeviceId && videoDevices.length > 0) {
+        setSelectedDeviceId(videoDevices[0].deviceId);
+      }
+    };
+
+    navigator.mediaDevices.addEventListener('devicechange', handleDeviceChange);
+    return () => {
+      navigator.mediaDevices.removeEventListener('devicechange', handleDeviceChange);
+    };
+  }, [enumerateMediaDevices, selectedDeviceId, selectedMicId, startCamera, status]);
+
+  useEffect(() => {
+    if (!streamRef.current) return;
+    if (!hasStartedRef.current) {
+      hasStartedRef.current = true;
+      return;
     }
-  }, [selectedDeviceId, status, startCamera]);
+
+    streamRef.current.getTracks().forEach((track) => track.stop());
+    startCamera();
+  }, [selectedDeviceId, selectedMicId, startCamera]);
 
   const stopCamera = useCallback(() => {
     if (streamRef.current) {
@@ -117,9 +179,12 @@ export function useCamera() {
     status,
     error,
     deviceName,
-    cameras, // Exportar cámaras disponibles
-    selectedDeviceId, // ID seleccionado
-    switchCamera, // Función para cambiar
+    cameras,
+    microphones,
+    selectedDeviceId,
+    selectedMicId,
+    switchCamera,
+    switchMicrophone,
     startCamera,
     stopCamera,
   };
