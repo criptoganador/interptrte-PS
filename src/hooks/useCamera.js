@@ -55,7 +55,7 @@ export function useCamera() {
         }
       }
 
-      const audioConstraints = micDeviceId ? { deviceId: { exact: micDeviceId } } : false;
+      const audioConstraints = micDeviceId ? { deviceId: { exact: micDeviceId } } : null;
       const constraints = {
         video: {
           width: { ideal: CAMERA_CONFIG.width },
@@ -63,7 +63,7 @@ export function useCamera() {
           frameRate: { ideal: CAMERA_CONFIG.frameRate },
           ...(cameraDeviceId ? { deviceId: { exact: cameraDeviceId } } : {})
         },
-        audio: audioConstraints,
+        ...(audioConstraints ? { audio: audioConstraints } : {}),
       };
 
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
@@ -85,9 +85,15 @@ export function useCamera() {
 
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        videoRef.current.onloadeddata = () => {
-          setStatus("ready");
+
+        const checkReady = () => {
+          if (videoRef.current && videoRef.current.readyState >= 2) {
+            setStatus("ready");
+          }
         };
+
+        videoRef.current.addEventListener("loadeddata", checkReady, { once: true });
+        checkReady();
       }
     } catch (err) {
       if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
