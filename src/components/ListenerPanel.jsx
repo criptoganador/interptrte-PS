@@ -8,6 +8,7 @@ export function ListenerPanel({ dataset, preferredMicDeviceId }) {
     messages,
     finalTranscript, 
     interimTranscript, 
+    recognitionError,
     startListening, 
     stopListening,
     clearTranscript 
@@ -104,6 +105,20 @@ export function ListenerPanel({ dataset, preferredMicDeviceId }) {
           🗑️ Borrar Todo
         </button>
       </div>
+
+      {recognitionError && (
+        <div className="listener-error" style={{
+          marginTop: '12px',
+          padding: '12px',
+          borderRadius: '8px',
+          background: 'rgba(255, 87, 34, 0.1)',
+          color: '#ff5722',
+          border: '1px solid rgba(255, 87, 34, 0.2)',
+          fontSize: '0.9rem'
+        }}>
+          ⚠️ {recognitionError}
+        </div>
+      )}
 
       {/* REPRODUCTOR DE AVATAR (Traductor de Texto a Señas - Movido arriba para evitar cortes de pantalla) */}
       {activeSequence ? (

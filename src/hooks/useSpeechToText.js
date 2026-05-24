@@ -5,6 +5,7 @@ export function useSpeechToText(preferredMicDeviceId) {
   const [messages, setMessages] = useState([]); // Historial de burbujas
   const [finalTranscript, setFinalTranscript] = useState("");
   const [interimTranscript, setInterimTranscript] = useState("");
+  const [recognitionError, setRecognitionError] = useState("");
   
   const recognitionRef = useRef(null);
   const audioStreamRef = useRef(null);
@@ -79,7 +80,16 @@ export function useSpeechToText(preferredMicDeviceId) {
 
     recognition.onerror = (event) => {
       console.error("❌ Error en reconocimiento de voz:", event.error);
+      const errorMessage = event.error === 'network'
+        ? 'El reconocimiento de voz no está disponible en este entorno de Electron. Usa Chrome o comprueba tu conexión.'
+        : `Error en reconocimiento de voz: ${event.error}`;
+      setRecognitionError(errorMessage);
       setIsListening(false);
+      stopAudioStream();
+    };
+
+    recognition.onstart = () => {
+      setRecognitionError("");
     };
 
     recognition.onend = () => {
@@ -114,6 +124,7 @@ export function useSpeechToText(preferredMicDeviceId) {
         stopAudioStream();
       }
 
+      setRecognitionError("");
       console.log('Iniciando micrófono con constraints:', mediaConstraints);
       audioStreamRef.current = await navigator.mediaDevices.getUserMedia(mediaConstraints);
       recognitionRef.current.start();
@@ -122,7 +133,11 @@ export function useSpeechToText(preferredMicDeviceId) {
       console.error("Error al iniciar micrófono:", err);
       setIsListening(false);
       if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
-        console.warn("Permiso de micrófono denegado. Verifica los permisos del navegador/Electron.");
+        setRecognitionError('Permiso de micrófono denegado. Verifica los permisos del navegador/Electron.');
+      } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+        setRecognitionError('No se encontró ningún micrófono conectado. Conecta un micrófono y vuelve a intentarlo.');
+      } else {
+        setRecognitionError('Error al iniciar el micrófono: ' + (err.message || err.name));
       }
     }
   }, [isListening, preferredMicDeviceId, stopAudioStream]);
@@ -139,6 +154,7 @@ export function useSpeechToText(preferredMicDeviceId) {
     setMessages([]);
     setFinalTranscript("");
     setInterimTranscript("");
+    setRecognitionError("");
     finalRef.current = "";
     if (timerRef.current) clearTimeout(timerRef.current);
   }, []);
@@ -155,6 +171,7 @@ export function useSpeechToText(preferredMicDeviceId) {
     messages,
     finalTranscript,
     interimTranscript,
+    recognitionError,
     startListening,
     stopListening,
     clearTranscript
