@@ -373,22 +373,6 @@ export function CameraView({
                 </option>
               ))}
             </select>
-            <button
-              type="button"
-              onClick={startCamera}
-              style={{
-                background: 'rgba(255,255,255,0.1)',
-                color: 'white',
-                border: '1px solid rgba(255,255,255,0.3)',
-                padding: '4px 10px',
-                borderRadius: '4px',
-                fontSize: '0.8rem',
-                cursor: 'pointer'
-              }}
-              title="Reintentar micrófono"
-            >
-              🔄 Reintentar micrófono
-            </button>
           </div>
         )}
 

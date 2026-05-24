@@ -107,6 +107,7 @@ export function useSpeechToText(preferredMicDeviceId) {
         stopAudioStream();
       }
 
+      console.log('Iniciando micrófono con constraints:', mediaConstraints);
       audioStreamRef.current = await navigator.mediaDevices.getUserMedia(mediaConstraints);
       recognitionRef.current.start();
       setIsListening(true);

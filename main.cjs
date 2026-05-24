@@ -1,5 +1,5 @@
 const path = require('path');
-const { app, BrowserWindow, session, shell, nativeImage, dialog } = require('electron');
+const { app, BrowserWindow, session, shell, nativeImage } = require('electron');
 
 const RENDER_URL = 'https://interptrte-ps.onrender.com';
 
@@ -42,40 +42,30 @@ app.commandLine.appendSwitch('disable-features', 'OutOfBlinkCors');
 app.setAppUserModelId('com.interptrte.ps');
 
 app.whenReady().then(() => {
-  session.defaultSession.setPermissionCheckHandler((webContents) => {
-    const currentUrl = webContents.getURL();
-    return currentUrl.startsWith(RENDER_URL);
+  const allowedMediaPermissions = new Set([
+    'media',
+    'audioCapture',
+    'videoCapture',
+    'camera',
+    'microphone',
+  ]);
+
+  session.defaultSession.setPermissionCheckHandler((webContents, permission) => {
+    if (allowedMediaPermissions.has(permission)) {
+      return true;
+    }
+    return false;
   });
 
-  session.defaultSession.setPermissionRequestHandler(async (webContents, permission, callback) => {
-    const currentUrl = webContents.getURL();
-    const permisosMedia = ['media', 'audioCapture', 'videoCapture', 'camera', 'microphone'];
-
-    if (!currentUrl.startsWith(RENDER_URL) || !permisosMedia.includes(permission)) {
-      console.log('Permission denied for', permission, 'on', currentUrl);
-      callback(false);
+  session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
+    if (allowedMediaPermissions.has(permission)) {
+      console.log('Electron: permitiendo permiso de media para', permission, 'en', webContents.getURL());
+      callback(true);
       return;
     }
 
-    const permisoNombre = permission === 'microphone'
-      ? 'micrófono'
-      : permission === 'camera'
-      ? 'cámara'
-      : 'micrófono y cámara';
-
-    const respuesta = await dialog.showMessageBox({
-      type: 'question',
-      buttons: ['Permitir', 'Denegar'],
-      defaultId: 0,
-      cancelId: 1,
-      title: 'Permiso de dispositivo',
-      message: `La aplicación quiere usar tu ${permisoNombre}.`,
-      detail: `URL: ${currentUrl}`,
-    });
-
-    const permitido = respuesta.response === 0;
-    console.log('Permission', permitido ? 'allowed' : 'denied', 'for', permission, 'on', currentUrl);
-    callback(permitido);
+    console.log('Electron: denegando permiso de media para', permission, 'en', webContents.getURL());
+    callback(false);
   });
 
   createWindow();
