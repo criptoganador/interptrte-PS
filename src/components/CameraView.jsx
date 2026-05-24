@@ -42,7 +42,7 @@ export function CameraView({
     translationRef.current = translation;
   }, [translation]);
 
-  // Auto-hablar y limpiar frase tras 3 segundos de inactividad
+  // Auto-hablar y limpiar frase tras 2 segundos de inactividad
   useEffect(() => {
     if (sentence.length > 0) {
       const timer = setTimeout(() => {
@@ -51,7 +51,7 @@ export function CameraView({
           translationRef.current.speakText(sentence.join(" "));
         }
         setSentence([]); // Limpiar la pantalla para la siguiente oración
-      }, 3000); // 3 segundos de pausa
+      }, 2000); // 2 segundos de pausa (antes 3000)
 
       return () => clearTimeout(timer);
     }
@@ -192,6 +192,10 @@ export function CameraView({
       let currentSign = null;
       
       if (handResults && handResults.landmarks.length > 0) {
+        if (window._noHandsTimer) {
+          clearTimeout(window._noHandsTimer);
+          window._noHandsTimer = null;
+        }
         currentSign = translationRef.current.translateFrame({
           hands: handResults.landmarks,
           handednesses: handResults.handednesses?.map(h => h[0]?.categoryName) || [],
@@ -200,8 +204,14 @@ export function CameraView({
       } else {
         // Le avisamos a la IA que no hay manos para que limpie su historial
         currentSign = translationRef.current.translateFrame(null);
-        // Si baja la mano, olvidamos la última seña que dijimos
-        lastSpokenRef.current = "";
+        // Si baja la mano, esperamos 400ms antes de olvidar la última seña. 
+        // Esto evita tartamudeos (flicker) pero permite cambiar de mano rápido.
+        if (!window._noHandsTimer) {
+          window._noHandsTimer = setTimeout(() => {
+            lastSpokenRef.current = "";
+            window._noHandsTimer = null;
+          }, 400); // Antes 1000
+        }
       }
       
       // Si hay una seña nueva y estable, y es diferente a la última hablada
