@@ -85,14 +85,16 @@ export function CameraView({
       // Iniciar cámara
       await startCamera();
 
-      // Inicializar detectores en paralelo
-      await Promise.all([
-        handDetection.initialize(),
-        faceDetection.initialize(),
-        poseDetection.initialize(),
-      ]);
-
+      // Permitir que el loop de detección inicie inmediatamente para mostrar el video
       setIsInitialized(true);
+
+      // Inicializar detectores secuencialmente por prioridad para no saturar la red ni congelar la GPU
+      // 1. Manos (Vital para la traducción, queremos que aparezca rápido)
+      await handDetection.initialize();
+      // 2. Pose (Anclaje del cuerpo)
+      await poseDetection.initialize();
+      // 3. Rostro (Más pesado, carga en segundo plano)
+      faceDetection.initialize(); // Sin await para que termine de cargar cuando pueda
     }
 
     init();

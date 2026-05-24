@@ -102,7 +102,13 @@ export function useSignTranslation() {
   }, [selectedVoiceURI]);
 
   /**
-   * Procesa el frame completo, hace la inferencia y devuelve la traducción estabilizada
+   * Procesa el frame completo, hace la inferencia y devuelve la traducción estabilizada.
+   * 
+   * UMBRALES CALIBRADOS para datos diversos (misma seña con diferentes manos/posiciones):
+   * - Confianza mínima: 60% (antes 80%) — permite más variación
+   * - Brecha mínima: 0.15 (antes 0.3) — no exige dominio absoluto
+   * - Distancia centroide: 6.0 (antes 3.5) — tolera mano derecha vs izquierda
+   * - Consenso: 4 de 6 (antes 6/6) — permite frames ruidosos
    */
   const translateFrame = useCallback((frame) => {
     if (!isModelReady || !model) return null;
@@ -142,16 +148,30 @@ export function useSignTranslation() {
           }
         }
 
-        // Vigilante Estricto: Exigir 80% de seguridad y que el modelo no esté dudando
-        // (la diferencia entre la mejor opción y la segunda debe ser amplia)
-        if (maxProb >= 0.80 && (maxProb - secondMaxProb) > 0.3) {
-          const predictedLabel = labelsRef.current[maxIndex] || `Seña ${maxIndex}`;
+        const predictedLabel = labelsRef.current[maxIndex] || `Seña ${maxIndex}`;
+        const gap = maxProb - secondMaxProb;
+
+        // 🔍 DIAGNÓSTICO SIEMPRE ACTIVO (ver en Consola F12 del navegador)
+        // Throttle: solo loguear cada ~500ms para no saturar la consola
+        if (!window._lastDiagLog || performance.now() - window._lastDiagLog > 500) {
+          window._lastDiagLog = performance.now();
+          console.log(
+            `🧠 IA dice: "${predictedLabel}" | Confianza: ${(maxProb * 100).toFixed(1)}% | Brecha: ${(gap * 100).toFixed(1)}% | ` +
+            `Filtro confianza: ${maxProb >= 0.60 ? '✅' : '❌'} (≥60%) | Filtro brecha: ${gap > 0.15 ? '✅' : '❌'} (>15%)`
+          );
+        }
+
+        // Vigilante Adaptativo: Exigir 60% de seguridad y brecha razonable
+        // (relajado para tolerar grabaciones diversas con ambas manos y posiciones)
+        if (maxProb >= 0.60 && gap > 0.15) {
           
           // === VALIDADOR DE DISTANCIA MATEMÁTICA (Filtro Anti-Desconocidos) ===
           let isValid = true;
+          let minDistance = 0;
+          
           if (predictedLabel !== "REPOSO" && centroidsRef.current[predictedLabel]) {
             const labelCentroids = centroidsRef.current[predictedLabel];
-            let minDistance = Infinity;
+            minDistance = Infinity;
             
             if (Array.isArray(labelCentroids) && labelCentroids.length > 0) {
               // Comparamos contra todos los moldes grabados (ej: molde mano izquierda, molde mano derecha)
@@ -166,12 +186,19 @@ export function useSignTranslation() {
               minDistance = calculateDistance(features, labelCentroids);
             }
             
-            // Log para calibrar: Puedes ver este valor en la consola de Chrome (F12)
-            // console.log(`Seña: ${predictedLabel} | Confianza: ${maxProb.toFixed(2)} | Distancia: ${minDistance.toFixed(2)}`);
+            // 🔍 Log de distancia (solo cuando pasa el primer filtro)
+            if (!window._lastDistLog || performance.now() - window._lastDistLog > 500) {
+              window._lastDistLog = performance.now();
+              console.log(
+                `📏 Distancia al molde más cercano de "${predictedLabel}": ${minDistance.toFixed(2)} | ` +
+                `Filtro distancia: ${minDistance <= 6.0 ? '✅' : '❌'} (≤6.0)`
+              );
+            }
             
             // Umbral calibrado de distancia geométrica. 
-            // 3.5 es más permisivo para variaciones naturales de la mano.
-            if (minDistance > 3.5) {
+            // 6.0 es más permisivo para tolerar mano derecha vs izquierda
+            // (el vector cambia completamente de posición: slots 0-62 vs 63-125)
+            if (minDistance > 6.0) {
               isValid = false;
             }
           }
@@ -183,7 +210,7 @@ export function useSignTranslation() {
               predictionHistoryRef.current.shift(); // Mantener solo los últimos 6
             }
 
-            if (predictionHistoryRef.current.length === 6) {
+            if (predictionHistoryRef.current.length >= 4) {
               const counts = {};
               let dominantLabel = predictedLabel;
               let maxCount = 0;
@@ -196,8 +223,10 @@ export function useSignTranslation() {
                 }
               }
               
-              // Requerir PERFECCIÓN: 6 de 6 frames idénticos
-              if (maxCount === 6) {
+              // Consenso por MAYORÍA: al menos 4 de los últimos 6 frames deben coincidir
+              // (antes exigía 6/6, lo cual era casi imposible con datos diversos)
+              const requiredConsensus = Math.min(4, predictionHistoryRef.current.length);
+              if (maxCount >= requiredConsensus) {
                 const labelUpper = dominantLabel.toUpperCase();
                 if (labelUpper === "REPOSO" || labelUpper === "NADA" || labelUpper === "..." || labelUpper === "RUIDO") {
                   setCurrentTranslation(""); // Ignorar la basura silenciosamente
@@ -214,11 +243,18 @@ export function useSignTranslation() {
             }
           }
         } else {
-          // Si el vigilante detecta dudas, no mostramos nada en pantalla
-          // y limpiamos el historial para obligar al usuario a hacer la seña bien
-          if (predictionHistoryRef.current.length > 0) {
+          // No pasó el filtro de confianza/brecha — la IA no está segura
+          // No limpiamos el historial agresivamente para permitir recuperación
+          // Solo limpiamos si llevamos muchos frames dudosos seguidos
+          predictionHistoryRef.current.push("__UNSURE__");
+          if (predictionHistoryRef.current.length > 6) {
+            predictionHistoryRef.current.shift();
+          }
+          // Si los últimos 6 frames fueron todos dudosos, limpiar
+          const unsureCount = predictionHistoryRef.current.filter(l => l === "__UNSURE__").length;
+          if (unsureCount >= 5) {
             predictionHistoryRef.current = [];
-            setCurrentTranslation(""); 
+            setCurrentTranslation("");
           }
         }
       } catch (error) {

@@ -1,8 +1,9 @@
 /**
  * TrainerPanel — Interfaz para capturar datos de entrenamiento
+ * Incluye el editor de texto con mensajes del Grabador Inteligente
  */
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 export function TrainerPanel({ collector }) {
   const [labelInput, setLabelInput] = useState("");
@@ -14,7 +15,9 @@ export function TrainerPanel({ collector }) {
     startRecording,
     clearDataset,
     undoLastSample,
-    datasetLength
+    datasetLength,
+    recorderMessage,
+    clearRecorderMessage
   } = collector;
 
   const handleRecord = () => {
@@ -24,6 +27,16 @@ export function TrainerPanel({ collector }) {
     }
     startRecording(labelInput.toUpperCase());
   };
+
+  // Auto-limpiar el mensaje después de 8 segundos
+  useEffect(() => {
+    if (recorderMessage) {
+      const timer = setTimeout(() => {
+        clearRecorderMessage();
+      }, 8000);
+      return () => clearTimeout(timer);
+    }
+  }, [recorderMessage, clearRecorderMessage]);
 
   return (
     <aside className="trainer-panel" id="trainer-panel">
@@ -67,6 +80,29 @@ export function TrainerPanel({ collector }) {
             : "Se grabarán 2 segundos de movimiento."}
         </p>
       </section>
+
+      {/* === EDITOR DE TEXTO: Mensajes del Grabador Inteligente === */}
+      {recorderMessage && (
+        <section className="diag-section recorder-message-section">
+          <div 
+            className={`recorder-message ${recorderMessage.type}`}
+            onClick={clearRecorderMessage}
+            title="Clic para cerrar"
+          >
+            <div className="recorder-message-header">
+              {recorderMessage.type === "duplicate" && "🔁 Grabador Inteligente"}
+              {recorderMessage.type === "success" && "✅ Grabación Exitosa"}
+              {recorderMessage.type === "error" && "⚠️ Error de Grabación"}
+            </div>
+            <div className="recorder-message-body">
+              {recorderMessage.text}
+            </div>
+            <div className="recorder-message-dismiss">
+              Toca para cerrar
+            </div>
+          </div>
+        </section>
+      )}
 
       <section className="diag-section">
         <h3 className="section-title">Estadísticas del Dataset</h3>

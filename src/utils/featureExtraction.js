@@ -22,6 +22,33 @@ export function extractFeatures(frame) {
     origin = frame.hands[0][0]; // Fallback a la primera muñeca detectada
   }
 
+  // Calcular factor de escala (Distancia entre los hombros) para Invarianza de Escala
+  let scale = 1.0;
+  if (frame.pose && frame.pose.length > 12) {
+    const leftShoulder = frame.pose[11];
+    const rightShoulder = frame.pose[12];
+    scale = Math.sqrt(
+      Math.pow(leftShoulder.x - rightShoulder.x, 2) +
+      Math.pow(leftShoulder.y - rightShoulder.y, 2) +
+      Math.pow(leftShoulder.z - rightShoulder.z, 2)
+    );
+  }
+  
+  // Fallback si no hay hombros visibles: usar el tamaño de la mano
+  if (scale < 0.01 && frame.hands[0].length > 9) {
+    const wrist = frame.hands[0][0];
+    const middleFinger = frame.hands[0][9];
+    scale = Math.sqrt(
+      Math.pow(wrist.x - middleFinger.x, 2) +
+      Math.pow(wrist.y - middleFinger.y, 2) +
+      Math.pow(wrist.z - middleFinger.z, 2)
+    );
+    scale = scale * 4; // Ajuste empírico porque la mano es más pequeña que los hombros
+  }
+  
+  // Evitar división por cero
+  if (scale < 0.01) scale = 1.0;
+
   // Procesar cada mano detectada
   for (let i = 0; i < frame.hands.length; i++) {
     const hand = frame.hands[i];
@@ -32,11 +59,11 @@ export function extractFeatures(frame) {
       ? frame.handednesses[i] 
       : (i === 0 ? "Right" : "Left"); // Fallback
 
-    // Normalizar puntos restando el origen (la nariz)
+    // Normalizar puntos restando el origen (la nariz) y dividiendo por la escala
     const normalizedHand = hand.flatMap(p => [
-      p.x - origin.x,
-      p.y - origin.y,
-      p.z - origin.z
+      (p.x - origin.x) / scale,
+      (p.y - origin.y) / scale,
+      (p.z - origin.z) / scale
     ]);
 
     const isLeft = handedness.toLowerCase() === "left";
