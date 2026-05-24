@@ -55,28 +55,17 @@ function App() {
 
   useEffect(() => {
     if (user && token && syncCommunityFromCloud) {
-      syncCommunityFromCloud().catch((err) => {
-        console.error('Error en la descarga comunitaria automática:', err);
-      });
+      const isLocalEnvironment = ['localhost', '127.0.0.1'].includes(window.location.hostname);
+
+      if (isLocalEnvironment) {
+        syncCommunityFromCloud().catch((err) => {
+          console.error('Error en la descarga comunitaria automática:', err);
+        });
+      } else {
+        console.log('Auto-sync comunitario omitido fuera de entorno local.');
+      }
     }
   }, [user, token, syncCommunityFromCloud]);
-
-  useEffect(() => {
-    const requestInitialMicrophone = async () => {
-      if (!user || !token) return;
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
-
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        stream.getTracks().forEach((track) => track.stop());
-        console.log('Solicitud inicial de permiso de micrófono completada.');
-      } catch (err) {
-        console.warn('No se pudo solicitar permiso de micrófono al iniciar la app:', err?.name || err);
-      }
-    };
-
-    requestInitialMicrophone();
-  }, [user, token]);
 
   // Enlazar el borrado del dataset con la remoción física e instantánea del modelo entrenado
   const collectorWithUnload = useMemo(() => ({

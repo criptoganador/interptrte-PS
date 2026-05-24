@@ -13,9 +13,16 @@ export function useSpeechToText(preferredMicDeviceId) {
 
   useEffect(() => {
     const requestInitialMicrophone = async () => {
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !navigator.mediaDevices.enumerateDevices) return;
 
       try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const hasAudioInput = devices.some((device) => device.kind === 'audioinput');
+        if (!hasAudioInput) {
+          console.warn('No hay ningún dispositivo de audio de entrada disponible.');
+          return;
+        }
+
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         stream.getTracks().forEach((track) => track.stop());
       } catch (err) {

@@ -46,7 +46,8 @@ export function useCamera() {
         ? selectedDeviceId
         : videoDevices[0]?.deviceId || "";
 
-      let micDeviceId = selectedMicId && audioDevices.some((d) => d.deviceId === selectedMicId)
+      const hasAudioInput = audioDevices.length > 0;
+      let micDeviceId = hasAudioInput && selectedMicId && audioDevices.some((d) => d.deviceId === selectedMicId)
         ? selectedMicId
         : audioDevices[0]?.deviceId || "";
 
@@ -57,7 +58,6 @@ export function useCamera() {
         setSelectedMicId(micDeviceId);
       }
 
-      const audioConstraints = micDeviceId ? { deviceId: { exact: micDeviceId } } : null;
       const constraints = {
         video: {
           width: { ideal: CAMERA_CONFIG.width },
@@ -65,10 +65,23 @@ export function useCamera() {
           frameRate: { ideal: CAMERA_CONFIG.frameRate },
           ...(cameraDeviceId ? { deviceId: { exact: cameraDeviceId } } : {})
         },
-        ...(audioConstraints ? { audio: audioConstraints } : {}),
+        ...(hasAudioInput ? { audio: micDeviceId ? { deviceId: { exact: micDeviceId } } : true } : {}),
       };
 
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      let stream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
+      } catch (audioError) {
+        if (!hasAudioInput || audioError.name === 'NotFoundError' || audioError.name === 'DevicesNotFoundError') {
+          console.warn('No se pudo iniciar el audio junto con la cámara, intentando solo video.');
+          const videoOnlyConstraints = {
+            video: constraints.video
+          };
+          stream = await navigator.mediaDevices.getUserMedia(videoOnlyConstraints);
+        } else {
+          throw audioError;
+        }
+      }
       streamRef.current = stream;
 
       // Actualizar selección de dispositivos si se eligieron automáticamente
