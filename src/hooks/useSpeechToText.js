@@ -1,12 +1,13 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 
-export function useSpeechToText() {
+export function useSpeechToText(preferredMicDeviceId) {
   const [isListening, setIsListening] = useState(false);
   const [messages, setMessages] = useState([]); // Historial de burbujas
   const [finalTranscript, setFinalTranscript] = useState("");
   const [interimTranscript, setInterimTranscript] = useState("");
   
   const recognitionRef = useRef(null);
+  const audioStreamRef = useRef(null);
   const timerRef = useRef(null);
   const finalRef = useRef("");
 
@@ -74,23 +75,44 @@ export function useSpeechToText() {
     recognitionRef.current = recognition;
   }, []);
 
-  const startListening = useCallback(() => {
-    if (recognitionRef.current && !isListening) {
-      try {
-        recognitionRef.current.start();
-        setIsListening(true);
-      } catch (err) {
-        console.error("Error al iniciar micrófono:", err);
+  const stopAudioStream = useCallback(() => {
+    if (audioStreamRef.current) {
+      audioStreamRef.current.getTracks().forEach((track) => track.stop());
+      audioStreamRef.current = null;
+    }
+  }, []);
+
+  const startListening = useCallback(async () => {
+    if (!recognitionRef.current || isListening) return;
+
+    try {
+      const mediaConstraints = preferredMicDeviceId
+        ? { audio: { deviceId: { exact: preferredMicDeviceId } } }
+        : { audio: true };
+
+      if (audioStreamRef.current) {
+        stopAudioStream();
+      }
+
+      audioStreamRef.current = await navigator.mediaDevices.getUserMedia(mediaConstraints);
+      recognitionRef.current.start();
+      setIsListening(true);
+    } catch (err) {
+      console.error("Error al iniciar micrófono:", err);
+      setIsListening(false);
+      if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+        console.warn("Permiso de micrófono denegado. Verifica los permisos del navegador/Electron.");
       }
     }
-  }, [isListening]);
+  }, [isListening, preferredMicDeviceId, stopAudioStream]);
 
   const stopListening = useCallback(() => {
     if (recognitionRef.current && isListening) {
       recognitionRef.current.stop();
       setIsListening(false);
     }
-  }, [isListening]);
+    stopAudioStream();
+  }, [isListening, stopAudioStream]);
 
   const clearTranscript = useCallback(() => {
     setMessages([]);
@@ -99,6 +121,13 @@ export function useSpeechToText() {
     finalRef.current = "";
     if (timerRef.current) clearTimeout(timerRef.current);
   }, []);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+      stopAudioStream();
+    };
+  }, [stopAudioStream]);
 
   return {
     isListening,

@@ -22,7 +22,8 @@ export function CameraView({
   collector, 
   translation,
   isTheatreMode,
-  onToggleTheatreMode
+  onToggleTheatreMode,
+  onPreferredMicChange
 }) {
   const canvasRef = useRef(null);
   const animationRef = useRef(null);
@@ -72,6 +73,12 @@ export function CameraView({
     startCamera,
     stopCamera,
   } = useCamera();
+
+  useEffect(() => {
+    if (typeof onPreferredMicChange === "function") {
+      onPreferredMicChange(selectedMicId);
+    }
+  }, [selectedMicId, onPreferredMicChange]);
 
   const handDetection = useHandDetection();
   const faceDetection = useFaceDetection();
@@ -342,29 +349,47 @@ export function CameraView({
         )}
 
         {availableMicrophones && availableMicrophones.length > 0 && (
-          <select
-            value={selectedMicId}
-            onChange={(e) => switchMicrophone(e.target.value)}
-            style={{
-              background: 'rgba(0,0,0,0.6)',
-              color: 'white',
-              border: '1px solid rgba(255,255,255,0.3)',
-              padding: '4px 8px',
-              borderRadius: '4px',
-              fontSize: '0.8rem',
-              outline: 'none',
-              cursor: 'pointer',
-              maxWidth: '220px',
-              textOverflow: 'ellipsis'
-            }}
-            title="Seleccionar Micrófono"
-          >
-            {availableMicrophones.map((mic, idx) => (
-              <option key={mic.deviceId} value={mic.deviceId}>
-                🎤 {mic.label || `Micrófono ${idx + 1}`}
-              </option>
-            ))}
-          </select>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <select
+              value={selectedMicId}
+              onChange={(e) => switchMicrophone(e.target.value)}
+              style={{
+                background: 'rgba(0,0,0,0.6)',
+                color: 'white',
+                border: '1px solid rgba(255,255,255,0.3)',
+                padding: '4px 8px',
+                borderRadius: '4px',
+                fontSize: '0.8rem',
+                outline: 'none',
+                cursor: 'pointer',
+                maxWidth: '220px',
+                textOverflow: 'ellipsis'
+              }}
+              title="Seleccionar Micrófono"
+            >
+              {availableMicrophones.map((mic, idx) => (
+                <option key={mic.deviceId} value={mic.deviceId}>
+                  🎤 {mic.label || `Micrófono ${idx + 1}`}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={startCamera}
+              style={{
+                background: 'rgba(255,255,255,0.1)',
+                color: 'white',
+                border: '1px solid rgba(255,255,255,0.3)',
+                padding: '4px 10px',
+                borderRadius: '4px',
+                fontSize: '0.8rem',
+                cursor: 'pointer'
+              }}
+              title="Reintentar micrófono"
+            >
+              🔄 Reintentar micrófono
+            </button>
+          </div>
         )}
 
         {translation.voices && translation.voices.length > 0 && (

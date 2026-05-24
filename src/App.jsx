@@ -93,6 +93,7 @@ function App() {
   const [activeRightTab, setActiveRightTab] = useState("chat");
   const [isCompact, setIsCompact] = useState(window.innerWidth <= 900);
   const [isTheatreMode, setIsTheatreMode] = useState(false);
+  const [preferredMicDeviceId, setPreferredMicDeviceId] = useState("");
 
   useEffect(() => {
     const handleResize = () => {
@@ -127,6 +128,7 @@ function App() {
           translation={translation}
           isTheatreMode={isTheatreMode}
           onToggleTheatreMode={() => setIsTheatreMode(prev => !prev)}
+          onPreferredMicChange={setPreferredMicDeviceId}
         />
         
         {/* PANEL CENTRAL: MODO OYENTE O ENTRENADOR (Según el tamaño) */}
@@ -149,7 +151,10 @@ function App() {
           )}
 
           {(!isCompact || activeRightTab === "chat") ? (
-            <ListenerPanel dataset={collectorWithUnload._dataset || collectorWithUnload.dataset} />
+            <ListenerPanel 
+              dataset={collectorWithUnload._dataset || collectorWithUnload.dataset}
+              preferredMicDeviceId={preferredMicDeviceId}
+            />
           ) : (
             <div className="tab-trainer-content">
               <TrainerPanel collector={collectorWithUnload} />

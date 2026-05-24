@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { useSpeechToText } from "../hooks/useSpeechToText";
 import { AvatarReplay } from "./AvatarReplay";
 
-export function ListenerPanel({ dataset }) {
+export function ListenerPanel({ dataset, preferredMicDeviceId }) {
   const { 
     isListening, 
     messages,
@@ -11,7 +11,7 @@ export function ListenerPanel({ dataset }) {
     startListening, 
     stopListening,
     clearTranscript 
-  } = useSpeechToText();
+  } = useSpeechToText(preferredMicDeviceId);
 
   const [activeSequence, setActiveSequence] = useState(null);
   const [activeWord, setActiveWord] = useState("");

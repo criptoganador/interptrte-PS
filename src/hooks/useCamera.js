@@ -100,7 +100,7 @@ export function useCamera() {
     } catch (err) {
       if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
         setStatus("denied");
-        setError("Permiso de cámara denegado. Por favor, permite el acceso a la cámara.");
+        setError("Permiso de cámara o micrófono denegado. Por favor, permite el acceso en el diálogo de permisos.");
       } else if (err.name === "NotFoundError" || err.name === "DevicesNotFoundError") {
         const { videoDevices } = await enumerateMediaDevices();
         if (videoDevices.length > 0) {
@@ -111,7 +111,7 @@ export function useCamera() {
         }
 
         setStatus("error");
-        setError("No se encontró ninguna cámara. Verifica que la PS3 Eye esté conectada.");
+        setError("No se encontró ninguna cámara o micrófono. Verifica la conexión de los dispositivos y vuelve a intentar.");
       } else {
         setStatus("error");
         setError(`Error al acceder a la cámara: ${err.message}`);
