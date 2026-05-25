@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>InterPtrte PS</title>
+  <style>
+    body, html {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      width: 100%;
+      overflow: hidden;
+      font-family: system-ui, sans-serif;
+      background: #111827;
+      color: #f9fafb;
+    }
+
+    #toolbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px;
+      background: #1f2937;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+    }
+
+    #toolbar label {
+      margin: 0;
+      font-size: 0.95rem;
+      color: #cbd5e1;
+      min-width: 60px;
+    }
+
+    #address {
+      flex: 1;
+      min-width: 0;
+      padding: 10px 12px;
+      border-radius: 8px;
+      border: 1px solid #334155;
+      background: #0f172a;
+      color: #e2e8f0;
+      font-size: 0.95rem;
+    }
+
+    #address:focus {
+      outline: 2px solid #2563eb;
+    }
+
+    button {
+      padding: 10px 14px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 0.95rem;
+      background: #2563eb;
+      color: #fff;
+      transition: background 0.2s ease;
+    }
+
+    button:hover {
+      background: #1d4ed8;
+    }
+
+    webview {
+      width: 100%;
+      height: calc(100% - 56px);
+      border: none;
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <div id="toolbar">
+    <label for="address">Dirección</label>
+    <input id="address" type="text" value="https://interptrte-ps.onrender.com" spellcheck="false" autocomplete="off" />
+    <button id="go">Ir</button>
+    <button id="reload">Recargar</button>
+  </div>
+  <webview id="webview" src="https://interptrte-ps.onrender.com" allowpopups preload="" style="background: #000"></webview>
+
+  <script>
+    const address = document.getElementById('address');
+    const go = document.getElementById('go');
+    const reload = document.getElementById('reload');
+    const webview = document.getElementById('webview');
+
+    const normalizeUrl = (value) => {
+      try {
+        return new URL(value).href;
+      } catch (err) {
+        return value.startsWith('http://') || value.startsWith('https://') ? value : `https://${value}`;
+      }
+    };
+
+    const loadUrl = (value) => {
+      const url = normalizeUrl(value.trim());
+      if (!url) return;
+      webview.loadURL(url);
+    };
+
+    go.addEventListener('click', () => loadUrl(address.value));
+
+    address.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        loadUrl(address.value);
+      }
+    });
+
+    reload.addEventListener('click', () => {
+      webview.reload();
+    });
+
+    const updateAddress = () => {
+      const currentUrl = webview.getURL();
+      if (currentUrl) address.value = currentUrl;
+    };
+
+    webview.addEventListener('did-navigate', updateAddress);
+    webview.addEventListener('did-navigate-in-page', updateAddress);
+    webview.addEventListener('page-title-updated', (event) => {
+      document.title = event.title || 'InterPtrte PS';
+    });
+
+    webview.addEventListener('new-window', (event) => {
+      window.open(event.url);
+    });
+
+    webview.addEventListener('did-fail-load', (event) => {
+      console.warn('Webview fallo al cargar:', event.errorDescription, event.validatedURL);
+    });
+  </script>
+</body>
+</html>

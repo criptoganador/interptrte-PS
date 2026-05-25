@@ -24,17 +24,10 @@ function createWindow() {
   });
 
   win.loadURL(RENDER_URL);
-  win.setMenuBarVisibility(false);
-
-  win.webContents.setWindowOpenHandler(({ url }) => {
-    if (url.startsWith('http')) {
-      shell.openExternal(url);
-    }
-    return { action: 'deny' };
-  });
 
   win.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
-    console.error('Electron: fallo al cargar URL', validatedURL, errorCode, errorDescription);
+    console.error('Electron: fallo al cargar', validatedURL, errorCode, errorDescription);
+    // Podríamos reintentar cargar aquí si es necesario
   });
 
   win.webContents.on('console-message', (event, level, message, line, sourceId) => {
@@ -47,26 +40,22 @@ function createWindow() {
 }
 
 function setupPermissionHandlers() {
-  const allowedPermissions = new Set([
-    'media',
-    'camera',
-    'microphone',
-    'audioCapture',
-    'videoCapture',
-    'fullscreen',
-    'notifications',
-  ]);
-
-  session.defaultSession.setPermissionCheckHandler((webContents, permission, requestingOrigin) => {
-    const allowed = allowedPermissions.has(permission);
-    console.log('Electron: permission check', { permission, origin: requestingOrigin, allowed });
-    return allowed;
+  // Manejador para la comprobación de permisos
+  session.defaultSession.setPermissionCheckHandler((webContents, permission, requestingOrigin, details) => {
+    console.log('Electron: permission check', { permission, origin: requestingOrigin });
+    return true;
   });
 
+  // Manejador para las solicitudes de permisos (ej. getUserMedia)
   session.defaultSession.setPermissionRequestHandler((webContents, permission, callback, details) => {
-    const allowed = allowedPermissions.has(permission);
-    console.log('Electron: permission request', { permission, url: details.requestingUrl, allowed });
-    callback(allowed);
+    console.log('Electron: permission request', { permission, url: details.requestingUrl });
+    callback(true);
+  });
+
+  // Manejador para el acceso a dispositivos (Micrófono, Cámara) - Requerido en Electron nuevo
+  session.defaultSession.setDevicePermissionHandler((details) => {
+    console.log('Electron: device permission request', details.deviceType);
+    return true;
   });
 }
 

@@ -4,7 +4,8 @@ import { AvatarReplay } from "./AvatarReplay";
 
 export function ListenerPanel({ dataset, preferredMicDeviceId }) {
   const { 
-    isListening, 
+    isListening,
+    isModelLoading,
     messages,
     finalTranscript, 
     interimTranscript, 
@@ -94,8 +95,9 @@ export function ListenerPanel({ dataset, preferredMicDeviceId }) {
         <button 
           className={`action-button ${isListening ? 'stop-listening' : 'start-listening'}`}
           onClick={isListening ? stopListening : startListening}
+          disabled={isModelLoading}
         >
-          {isListening ? "🛑 Detener Micrófono" : "🎤 Activar Micrófono"}
+          {isModelLoading ? "⏳ Cargando Modelo IA..." : (isListening ? "🛑 Detener Micrófono" : "🎤 Activar Micrófono")}
         </button>
         <button 
           className="action-button clear-text"

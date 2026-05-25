@@ -1,108 +1,54 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import * as Vosk from 'vosk-browser';
 
 export function useSpeechToText(preferredMicDeviceId) {
   const [isListening, setIsListening] = useState(false);
+  const [isModelLoading, setIsModelLoading] = useState(false);
   const [messages, setMessages] = useState([]); // Historial de burbujas
   const [finalTranscript, setFinalTranscript] = useState("");
   const [interimTranscript, setInterimTranscript] = useState("");
   const [recognitionError, setRecognitionError] = useState("");
   
-  const recognitionRef = useRef(null);
+  const modelRef = useRef(null);
+  const recognizerRef = useRef(null);
+  const audioContextRef = useRef(null);
   const audioStreamRef = useRef(null);
-  const timerRef = useRef(null);
   const finalRef = useRef("");
+  const timerRef = useRef(null);
 
+  // Inicializar modelo Vosk offline al montar
   useEffect(() => {
-    const requestInitialMicrophone = async () => {
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !navigator.mediaDevices.enumerateDevices) return;
-
+    let isMounted = true;
+    const initVosk = async () => {
       try {
-        const devices = await navigator.mediaDevices.enumerateDevices();
-        const hasAudioInput = devices.some((device) => device.kind === 'audioinput');
-        if (!hasAudioInput) {
-          console.warn('No hay ningún dispositivo de audio de entrada disponible.');
-          return;
+        if (!modelRef.current) {
+          setIsModelLoading(true);
+          // Ruta al archivo del modelo en la carpeta public
+          const model = await Vosk.createModel('/models/vosk-model-small-es-0.42.zip');
+          if (isMounted) {
+            modelRef.current = model;
+            setIsModelLoading(false);
+            console.log("✅ Modelo Vosk cargado exitosamente");
+          } else {
+            model.terminate();
+          }
         }
-
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        stream.getTracks().forEach((track) => track.stop());
       } catch (err) {
-        console.warn('No se pudo solicitar permiso de micrófono al cargar:', err.name);
-      }
-    };
-
-    requestInitialMicrophone();
-
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      console.warn("⚠️ Este navegador no soporta el reconocimiento de voz.");
-      return;
-    }
-
-    const recognition = new SpeechRecognition();
-    recognition.continuous = true; 
-    recognition.interimResults = true; 
-    recognition.lang = "es-VE"; 
-
-    recognition.onresult = (event) => {
-      let currentInterim = "";
-      let currentFinal = "";
-      
-      for (let i = event.resultIndex; i < event.results.length; ++i) {
-        if (event.results[i].isFinal) {
-          currentFinal += event.results[i][0].transcript;
-        } else {
-          currentInterim += event.results[i][0].transcript;
+        console.error("❌ Error cargando modelo Vosk offline:", err);
+        if (isMounted) {
+          setRecognitionError("No se pudo cargar el modelo de IA offline. Verifica que se descargó correctamente.");
+          setIsModelLoading(false);
         }
       }
-      
-      if (currentFinal) {
-        setFinalTranscript(prev => {
-          const newFinal = prev + currentFinal + " ";
-          finalRef.current = newFinal;
-          return newFinal;
-        });
-      }
-      setInterimTranscript(currentInterim);
-      
-      // Manejo de Cajas Dinámicas: Si hay 2.5s de silencio, crear nueva burbuja
-      if (timerRef.current) clearTimeout(timerRef.current);
-      
-      timerRef.current = setTimeout(() => {
-        if (finalRef.current.trim() !== "") {
-          const newText = finalRef.current.trim();
-          setMessages(prev => [...prev, { id: Date.now(), text: newText }]);
-          setFinalTranscript(""); // Limpiar para la próxima burbuja
-          finalRef.current = "";
-        }
-      }, 2500); 
     };
+    initVosk();
 
-    recognition.onerror = (event) => {
-      console.error("❌ Error en reconocimiento de voz:", event.error);
-      const errorMessage = event.error === 'network'
-        ? 'El reconocimiento de voz no está disponible en este entorno de Electron. Usa Chrome o comprueba tu conexión.'
-        : `Error en reconocimiento de voz: ${event.error}`;
-      setRecognitionError(errorMessage);
-      setIsListening(false);
-      stopAudioStream();
-    };
-
-    recognition.onstart = () => {
-      setRecognitionError("");
-    };
-
-    recognition.onend = () => {
-      setIsListening(false);
-      // Al apagar el micro, si quedó texto colgado, guardarlo
-      if (finalRef.current.trim() !== "") {
-        setMessages(prev => [...prev, { id: Date.now(), text: finalRef.current.trim() }]);
-        setFinalTranscript("");
-        finalRef.current = "";
+    return () => {
+      isMounted = false;
+      if (modelRef.current) {
+        modelRef.current.terminate();
       }
     };
-
-    recognitionRef.current = recognition;
   }, []);
 
   const stopAudioStream = useCallback(() => {
@@ -110,45 +56,107 @@ export function useSpeechToText(preferredMicDeviceId) {
       audioStreamRef.current.getTracks().forEach((track) => track.stop());
       audioStreamRef.current = null;
     }
+    if (audioContextRef.current) {
+      audioContextRef.current.close().catch(console.error);
+      audioContextRef.current = null;
+    }
+    if (recognizerRef.current) {
+      // Remover los event listeners antes de limpiar
+      recognizerRef.current.off("result");
+      recognizerRef.current.off("partialresult");
+      recognizerRef.current.free();
+      recognizerRef.current = null;
+    }
+    setIsListening(false);
   }, []);
 
   const startListening = useCallback(async () => {
-    if (!recognitionRef.current || isListening) return;
+    if (isListening || !modelRef.current) {
+      if (!modelRef.current) setRecognitionError("El modelo de IA offline aún está cargando.");
+      return;
+    }
 
     try {
-      const mediaConstraints = preferredMicDeviceId
-        ? { audio: { deviceId: { exact: preferredMicDeviceId } } }
-        : { audio: true };
-
-      if (audioStreamRef.current) {
-        stopAudioStream();
-      }
-
       setRecognitionError("");
-      console.log('Iniciando micrófono con constraints:', mediaConstraints);
-      audioStreamRef.current = await navigator.mediaDevices.getUserMedia(mediaConstraints);
-      recognitionRef.current.start();
+      const mediaConstraints = preferredMicDeviceId
+        ? { audio: { deviceId: { exact: preferredMicDeviceId }, echoCancellation: true, noiseSuppression: true } }
+        : { audio: { echoCancellation: true, noiseSuppression: true } };
+
+      const stream = await navigator.mediaDevices.getUserMedia(mediaConstraints);
+      audioStreamRef.current = stream;
+
+      const audioContext = new AudioContext({ sampleRate: 16000 });
+      audioContextRef.current = audioContext;
+
+      // Crear reconocedor usando el modelo cargado
+      const recognizer = new modelRef.current.KaldiRecognizer(16000);
+      recognizerRef.current = recognizer;
+
+      recognizer.on("result", (message) => {
+        const text = message.result.text;
+        if (text && text.trim() !== "") {
+          setFinalTranscript(prev => {
+             const newFinal = (prev + " " + text).trim();
+             finalRef.current = newFinal;
+             return newFinal;
+          });
+          setInterimTranscript("");
+          
+          if (timerRef.current) clearTimeout(timerRef.current);
+          timerRef.current = setTimeout(() => {
+            if (finalRef.current.trim() !== "") {
+              setMessages(prev => [...prev, { id: Date.now(), text: finalRef.current.trim() }]);
+              setFinalTranscript("");
+              finalRef.current = "";
+            }
+          }, 2500);
+        }
+      });
+
+      recognizer.on("partialresult", (message) => {
+        const partial = message.result.partial;
+        if (partial && partial.trim() !== "") {
+           setInterimTranscript(partial);
+        }
+      });
+
+      const source = audioContext.createMediaStreamSource(stream);
+      const recognizerNode = audioContext.createScriptProcessor(4096, 1, 1);
+      
+      recognizerNode.onaudioprocess = (event) => {
+        try {
+          if (recognizerRef.current) {
+            recognizerRef.current.acceptWaveform(event.inputBuffer);
+          }
+        } catch (error) {
+          console.error("Error en procesamiento de audio Vosk:", error);
+        }
+      };
+
+      source.connect(recognizerNode);
+      recognizerNode.connect(audioContext.destination);
+
       setIsListening(true);
     } catch (err) {
-      console.error("Error al iniciar micrófono:", err);
+      console.error("Error al iniciar micrófono o modelo:", err);
       setIsListening(false);
       if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
-        setRecognitionError('Permiso de micrófono denegado. Verifica los permisos del navegador/Electron.');
-      } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
-        setRecognitionError('No se encontró ningún micrófono conectado. Conecta un micrófono y vuelve a intentarlo.');
+        setRecognitionError('Permiso de micrófono denegado. Verifica los permisos.');
       } else {
         setRecognitionError('Error al iniciar el micrófono: ' + (err.message || err.name));
       }
+      stopAudioStream();
     }
   }, [isListening, preferredMicDeviceId, stopAudioStream]);
 
   const stopListening = useCallback(() => {
-    if (recognitionRef.current && isListening) {
-      recognitionRef.current.stop();
-      setIsListening(false);
-    }
     stopAudioStream();
-  }, [isListening, stopAudioStream]);
+    if (finalRef.current.trim() !== "") {
+      setMessages(prev => [...prev, { id: Date.now(), text: finalRef.current.trim() }]);
+      setFinalTranscript("");
+      finalRef.current = "";
+    }
+  }, [stopAudioStream]);
 
   const clearTranscript = useCallback(() => {
     setMessages([]);
@@ -159,15 +167,9 @@ export function useSpeechToText(preferredMicDeviceId) {
     if (timerRef.current) clearTimeout(timerRef.current);
   }, []);
 
-  useEffect(() => {
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-      stopAudioStream();
-    };
-  }, [stopAudioStream]);
-
   return {
     isListening,
+    isModelLoading,
     messages,
     finalTranscript,
     interimTranscript,
