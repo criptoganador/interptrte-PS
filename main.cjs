@@ -1,7 +1,9 @@
 const path = require('path');
 const { app, BrowserWindow, session, shell, nativeImage } = require('electron');
 
-const RENDER_URL = 'https://interptrte-ps.onrender.com';
+const isDev = !app.isPackaged;
+// Usa localhost, Vite puede estar enlazado a IPv6 (::1) por defecto
+const DEV_URL = 'http://localhost:5173';
 
 function createWindow() {
   const iconPath = path.join(app.getAppPath(), 'public', 'favicon.svg');
@@ -23,11 +25,23 @@ function createWindow() {
     },
   });
 
-  win.loadURL(RENDER_URL);
+  const loadApp = () => {
+    if (isDev) {
+      win.loadURL(DEV_URL);
+    } else {
+      win.loadFile(path.join(__dirname, 'dist', 'index.html'));
+    }
+  };
+
+  loadApp();
 
   win.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
     console.error('Electron: fallo al cargar', validatedURL, errorCode, errorDescription);
-    // Podríamos reintentar cargar aquí si es necesario
+    // Si estamos en desarrollo y falla al conectar, reintenta cada 2 segundos
+    if (isDev && errorCode === -102) { // -102 es ERR_CONNECTION_REFUSED
+      console.log('Reintentando conectar al servidor local en 2 segundos...');
+      setTimeout(loadApp, 2000);
+    }
   });
 
   win.webContents.on('console-message', (event, level, message, line, sourceId) => {
