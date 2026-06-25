@@ -26,11 +26,8 @@ function createWindow() {
   });
 
   const loadApp = () => {
-    if (isDev) {
-      win.loadURL(DEV_URL);
-    } else {
-      win.loadFile(path.join(__dirname, 'dist', 'index.html'));
-    }
+    // Forzamos a Electron a siempre cargar la web de Render
+    win.loadURL('https://interptrte-ps.onrender.com/');
   };
 
   loadApp();
@@ -104,12 +101,11 @@ function setupSecurityHeaders() {
   );
 }
 
-app.commandLine.appendSwitch('disable-features', 'OutOfBlinkCors,AudioServiceOutOfProcess');
+app.commandLine.appendSwitch('disable-features', 'AudioServiceOutOfProcess');
 app.setAppUserModelId('com.interptrte.ps');
 
 app.whenReady().then(() => {
   setupPermissionHandlers();
-  setupSecurityHeaders();
   createWindow();
 
   app.on('activate', () => {
