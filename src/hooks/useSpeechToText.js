@@ -51,13 +51,15 @@ export function useSpeechToText(preferredMicDeviceId) {
     };
   }, []);
 
-  const stopAudioStream = useCallback(() => {
+  const stopAudioStream = useCallback(async () => {
     if (audioStreamRef.current) {
       audioStreamRef.current.getTracks().forEach((track) => track.stop());
       audioStreamRef.current = null;
     }
     if (audioContextRef.current) {
-      audioContextRef.current.close().catch(console.error);
+      if (audioContextRef.current.state !== 'closed') {
+        await audioContextRef.current.close().catch(console.error);
+      }
       audioContextRef.current = null;
     }
     if (recognizerRef.current) {
@@ -78,8 +80,24 @@ export function useSpeechToText(preferredMicDeviceId) {
 
     try {
       setRecognitionError("");
-      const mediaConstraints = preferredMicDeviceId
-        ? { audio: { deviceId: { exact: preferredMicDeviceId }, echoCancellation: true, noiseSuppression: true } }
+      
+      // SOLUCIÓN 2: Limpieza exhaustiva antes de pedir un nuevo stream
+      await stopAudioStream(); 
+
+      // SOLUCIÓN 1: Validar si el deviceId sigue existiendo para no mandar un ID fantasma o caducado
+      let validDeviceId = null;
+      if (preferredMicDeviceId) {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const deviceExists = devices.some(d => d.kind === 'audioinput' && d.deviceId === preferredMicDeviceId);
+        if (deviceExists) {
+          validDeviceId = preferredMicDeviceId;
+        } else {
+          console.warn("El micrófono preferido ya no está conectado o el ID caducó. Usando el predeterminado.");
+        }
+      }
+
+      const mediaConstraints = validDeviceId
+        ? { audio: { deviceId: { exact: validDeviceId }, echoCancellation: true, noiseSuppression: true } }
         : { audio: { echoCancellation: true, noiseSuppression: true } };
 
       const stream = await navigator.mediaDevices.getUserMedia(mediaConstraints);
@@ -140,14 +158,24 @@ export function useSpeechToText(preferredMicDeviceId) {
     } catch (err) {
       console.error("Error al iniciar micrófono o modelo:", err);
       setIsListening(false);
-      if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
-        setRecognitionError('Permiso de micrófono denegado. Verifica los permisos.');
+      if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError" || err.name === "OverconstrainedError") {
+        setRecognitionError('Permiso de micrófono denegado o dispositivo desconectado. Verifica los permisos.');
       } else {
         setRecognitionError('Error al iniciar el micrófono: ' + (err.message || err.name));
       }
-      stopAudioStream();
+      await stopAudioStream();
     }
   }, [isListening, preferredMicDeviceId, stopAudioStream]);
+
+  // Escuchar activamente cuando se conecta/desconecta un USB en caliente
+  useEffect(() => {
+    const handleDeviceChange = async () => {
+      // Refresca la lista interna de dispositivos de Chromium automáticamente
+      await navigator.mediaDevices.enumerateDevices();
+    };
+    navigator.mediaDevices.addEventListener('devicechange', handleDeviceChange);
+    return () => navigator.mediaDevices.removeEventListener('devicechange', handleDeviceChange);
+  }, []);
 
   const stopListening = useCallback(() => {
     stopAudioStream();

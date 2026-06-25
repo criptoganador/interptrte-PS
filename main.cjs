@@ -104,7 +104,7 @@ function setupSecurityHeaders() {
   );
 }
 
-app.commandLine.appendSwitch('disable-features', 'OutOfBlinkCors');
+app.commandLine.appendSwitch('disable-features', 'OutOfBlinkCors,AudioServiceOutOfProcess');
 app.setAppUserModelId('com.interptrte.ps');
 
 app.whenReady().then(() => {
