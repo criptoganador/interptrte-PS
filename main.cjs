@@ -33,12 +33,8 @@ function createWindow() {
   loadApp();
 
   win.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
-    console.error('Electron: fallo al cargar', validatedURL, errorCode, errorDescription);
-    // Si estamos en desarrollo y falla al conectar, reintenta cada 2 segundos
-    if (isDev && errorCode === -102) { // -102 es ERR_CONNECTION_REFUSED
-      console.log('Reintentando conectar al servidor local en 2 segundos...');
-      setTimeout(loadApp, 2000);
-    }
+    console.error('Electron: error de conexión con Render', validatedURL, errorCode, errorDescription);
+    // Simplemente imprimimos el error, sin reintentos raros ni mensajes confusos.
   });
 
   win.webContents.on('console-message', (event, level, message, line, sourceId) => {
