@@ -26,8 +26,13 @@ function createWindow() {
   });
 
   const loadApp = () => {
-    // Forzamos a Electron a siempre cargar la web de Render
-    win.loadURL('https://interptrte-ps.onrender.com/');
+    if (isDev) {
+      // En desarrollo, carga el servidor local de Vite
+      win.loadURL(DEV_URL);
+    } else {
+      // En producción (cuando es un .exe), carga los archivos locales
+      win.loadFile(path.join(__dirname, 'dist', 'index.html'));
+    }
   };
 
   loadApp();
