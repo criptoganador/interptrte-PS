@@ -1,5 +1,7 @@
 import { useState } from 'react';
 
+const API_URL = import.meta.env.PROD ? 'https://interptrte-ps-backend.onrender.com' : 'http://localhost:3001';
+
 export function Auth({ onLogin }) {
   const [isLogin, setIsLogin] = useState(true);
   const [isResetMode, setIsResetMode] = useState(false);
@@ -28,7 +30,7 @@ export function Auth({ onLogin }) {
       }
 
       try {
-        const response = await fetch('http://localhost:3001/api/auth/reset-password', {
+        const response = await fetch(`${API_URL}/api/auth/reset-password`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
@@ -57,7 +59,7 @@ export function Auth({ onLogin }) {
     const endpoint = isLogin ? '/api/auth/login' : '/api/auth/register';
     
     try {
-      const response = await fetch(`http://localhost:3001${endpoint}`, {
+      const response = await fetch(`${API_URL}${endpoint}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'

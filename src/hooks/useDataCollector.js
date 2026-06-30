@@ -11,6 +11,8 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import { get, set } from "idb-keyval";
 import { extractFeatures, calculateDistance } from "../utils/featureExtraction";
 
+const API_URL = import.meta.env.PROD ? 'https://interptrte-ps-backend.onrender.com' : 'http://localhost:3001';
+
 // Umbral de similitud: si la distancia entre dos muestras es menor a esto,
 // se consideran duplicadas (misma forma, posición y ubicación).
 // Valor calibrado: 1.5 es muy estricto (captura casi-clones exactos).
@@ -202,7 +204,7 @@ export function useDataCollector() {
 
     setCommunitySyncStatus('syncing');
     try {
-      const response = await fetch('http://localhost:3001/api/sync/community', {
+      const response = await fetch(`${API_URL}/api/sync/community`, {
         method: 'GET',
         headers: {
           Authorization: `Bearer ${token}`
@@ -454,7 +456,7 @@ export function useDataCollector() {
     }
 
     try {
-      const response = await fetch('http://localhost:3001/api/sync/upload', {
+      const response = await fetch(`${API_URL}/api/sync/upload`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -499,7 +501,7 @@ export function useDataCollector() {
 
     setSyncStatus('syncing');
     try {
-      const response = await fetch('http://localhost:3001/api/sync/download', {
+      const response = await fetch(`${API_URL}/api/sync/download`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`
