@@ -553,6 +553,28 @@ export function useDataCollector() {
     }
   }, []);
 
+  /**
+   * Sincronización automática al recuperar la conexión a internet
+   */
+  useEffect(() => {
+    const handleOnline = async () => {
+      console.log('🌐 Conexión a internet recuperada. Iniciando sincronización automática...');
+      const token = localStorage.getItem('lsv-token');
+      
+      if (token) {
+        // 1. Subir cualquier seña local pendiente de forma silenciosa
+        await syncToCloud({ silent: true });
+        // 2. Descargar actualizaciones de la comunidad
+        await syncCommunityFromCloud();
+      }
+    };
+
+    window.addEventListener('online', handleOnline);
+    
+    // Limpieza del event listener
+    return () => window.removeEventListener('online', handleOnline);
+  }, [syncToCloud, syncCommunityFromCloud]);
+
   return {
     isRecording,
     countdown,
