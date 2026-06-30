@@ -5,4 +5,12 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   base: './',
   plugins: [react()],
+  resolve: {
+    alias: {
+      '@tensorflow/tfjs': '@tensorflow/tfjs/dist/tf.fesm.js'
+    }
+  },
+  optimizeDeps: {
+    exclude: ['@tensorflow/tfjs']
+  }
 })

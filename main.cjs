@@ -48,6 +48,9 @@ function createWindow() {
 
   win.once('ready-to-show', () => {
     win.show();
+    if (isDev) {
+      win.webContents.openDevTools();
+    }
   });
 }
 
