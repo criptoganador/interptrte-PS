@@ -35,6 +35,14 @@ export function CameraView({
   const [handsCount, setHandsCount] = useState(0);
   const handsCountRef = useRef(0);
   const [sentence, setSentence] = useState([]); // Estado para la frase completa
+  const [zoomLevel, setZoomLevel] = useState(1); // 1 = 100%
+  const ZOOM_STEP = 0.1;
+  const ZOOM_MIN = 0.5;
+  const ZOOM_MAX = 3.0;
+
+  const zoomIn  = () => setZoomLevel(prev => Math.min(+(prev + ZOOM_STEP).toFixed(1), ZOOM_MAX));
+  const zoomOut = () => setZoomLevel(prev => Math.max(+(prev - ZOOM_STEP).toFixed(1), ZOOM_MIN));
+  const zoomReset = () => setZoomLevel(1);
 
   // Referencia para mantener actualizado el prop translation sin provocar re-creación de callbacks
   const translationRef = useRef(translation);
@@ -463,6 +471,11 @@ export function CameraView({
         autoPlay
         playsInline
         muted
+        style={{
+          transform: `scale(${zoomLevel})`,
+          transformOrigin: 'center center',
+          transition: 'transform 0.2s ease'
+        }}
       />
 
       {/* Canvas overlay para landmarks */}
@@ -470,6 +483,11 @@ export function CameraView({
         ref={canvasRef}
         className="landmarks-canvas"
         id="landmarks-canvas"
+        style={{
+          transform: `scale(${zoomLevel})`,
+          transformOrigin: 'center center',
+          transition: 'transform 0.2s ease'
+        }}
       />
 
       {/* Borde glow cuando detecta manos */}
@@ -536,6 +554,74 @@ export function CameraView({
         <div className="youtube-controls-right">
           <span className="youtube-badge cc">CC</span>
           <span className="youtube-badge hd">HD</span>
+
+          {/* Controles de Zoom */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginRight: '4px' }}>
+            <button
+              id="btn-zoom-out"
+              onClick={zoomOut}
+              disabled={zoomLevel <= ZOOM_MIN}
+              title="Alejar cámara"
+              style={{
+                background: 'rgba(255,255,255,0.15)',
+                border: 'none',
+                color: 'white',
+                cursor: zoomLevel <= ZOOM_MIN ? 'not-allowed' : 'pointer',
+                borderRadius: '4px',
+                width: '26px',
+                height: '26px',
+                fontSize: '16px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                opacity: zoomLevel <= ZOOM_MIN ? 0.4 : 0.85,
+                transition: 'opacity 0.15s, transform 0.1s'
+              }}
+              onMouseEnter={e => { if (zoomLevel > ZOOM_MIN) { e.currentTarget.style.opacity = 1; e.currentTarget.style.transform = 'scale(1.15)'; }}}
+              onMouseLeave={e => { e.currentTarget.style.opacity = zoomLevel <= ZOOM_MIN ? '0.4' : '0.85'; e.currentTarget.style.transform = 'scale(1)'; }}
+            >−</button>
+
+            <span
+              onClick={zoomReset}
+              title="Restablecer zoom (clic para 100%)"
+              style={{
+                color: 'white',
+                fontSize: '0.72rem',
+                fontWeight: 'bold',
+                minWidth: '36px',
+                textAlign: 'center',
+                cursor: 'pointer',
+                opacity: 0.9,
+                userSelect: 'none'
+              }}
+            >
+              {Math.round(zoomLevel * 100)}%
+            </span>
+
+            <button
+              id="btn-zoom-in"
+              onClick={zoomIn}
+              disabled={zoomLevel >= ZOOM_MAX}
+              title="Acercar cámara"
+              style={{
+                background: 'rgba(255,255,255,0.15)',
+                border: 'none',
+                color: 'white',
+                cursor: zoomLevel >= ZOOM_MAX ? 'not-allowed' : 'pointer',
+                borderRadius: '4px',
+                width: '26px',
+                height: '26px',
+                fontSize: '16px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                opacity: zoomLevel >= ZOOM_MAX ? 0.4 : 0.85,
+                transition: 'opacity 0.15s, transform 0.1s'
+              }}
+              onMouseEnter={e => { if (zoomLevel < ZOOM_MAX) { e.currentTarget.style.opacity = 1; e.currentTarget.style.transform = 'scale(1.15)'; }}}
+              onMouseLeave={e => { e.currentTarget.style.opacity = zoomLevel >= ZOOM_MAX ? '0.4' : '0.85'; e.currentTarget.style.transform = 'scale(1)'; }}
+            >+</button>
+          </div>
 
           {/* Botón de Modo Cine / Teatro estilo YouTube */}
           <button 
