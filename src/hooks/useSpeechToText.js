@@ -63,9 +63,6 @@ export function useSpeechToText(preferredMicDeviceId) {
       audioContextRef.current = null;
     }
     if (recognizerRef.current) {
-      // Remover los event listeners antes de limpiar
-      recognizerRef.current.off("result");
-      recognizerRef.current.off("partialresult");
       recognizerRef.current.free();
       recognizerRef.current = null;
     }
